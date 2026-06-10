@@ -14,7 +14,7 @@ import yaml
 from .models import (
     ApiSpec, EndpointDef, FieldDef, ParameterDef, RequestDef,
     ResponseDef, Change, ChangeType, ImpactLevel, ChangeScope,
-    FieldChange, ChangelogEntry, ReleaseInfo
+    FieldChange, ChangelogEntry, ReleaseInfo, ReleaseStatus
 )
 
 
@@ -331,29 +331,35 @@ class Storage:
         with open(self.changelog_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
-    def get_entry(self, version: str) -> Optional[ChangelogEntry]:
+    def get_entry(self, spec_name: str, version: str) -> Optional[ChangelogEntry]:
+        """Get a changelog entry by (spec_name, version) composite key."""
         for e in self.load_changelog():
-            if e.version == version:
+            if e.spec_name == spec_name and e.version == version:
                 return e
         return None
 
-    def get_entry_by_spec(self, spec_name: str, version: str) -> Optional[ChangelogEntry]:
-        for e in self.load_changelog():
-            if e.version == version and getattr(e, "spec_name", "") == spec_name:
-                return e
-        return None
+    def list_entries_by_spec(self, spec_name: str) -> list[ChangelogEntry]:
+        """List all changelog entries for a specific service, newest first."""
+        return sorted(
+            [e for e in self.load_changelog() if e.spec_name == spec_name],
+            key=lambda e: e.version,
+            reverse=True,
+        )
 
     def upsert_entry(self, entry: ChangelogEntry) -> None:
+        """Insert or update a changelog entry by (spec_name, version)."""
+        if not entry.spec_name:
+            raise ValueError("ChangelogEntry.spec_name is required for upsert")
         entries = self.load_changelog()
         found = False
         for i, e in enumerate(entries):
-            if e.version == entry.version and getattr(e, "spec_name", "") == getattr(entry, "spec_name", ""):
+            if e.spec_name == entry.spec_name and e.version == entry.version:
                 entries[i] = entry
                 found = True
                 break
         if not found:
             entries.append(entry)
-        entries.sort(key=lambda e: e.version, reverse=True)
+        entries.sort(key=lambda e: (e.spec_name, e.version), reverse=True)
         self.save_changelog(entries)
 
     def _entry_from_dict(self, data: dict) -> ChangelogEntry:
@@ -382,18 +388,30 @@ class Storage:
                 migration_guide=c.get("migration_guide", ""),
             ))
         release_date = data.get("release_date")
-        entry = ChangelogEntry(
+        status_str = data.get("status")
+        if status_str:
+            status = ReleaseStatus(status_str)
+        elif data.get("released", False):
+            status = ReleaseStatus.PUBLISHED
+        else:
+            status = ReleaseStatus.DRAFT
+
+        return ChangelogEntry(
+            spec_name=data.get("spec_name", ""),
             version=data["version"],
             release_date=datetime.fromisoformat(release_date).date() if release_date else None,
             changes=changes,
             notes=data.get("notes", []),
-            released=data.get("released", False),
+            status=status,
+            released_by=data.get("released_by", ""),
+            release_channel=data.get("release_channel", ""),
+            markdown_path=data.get("markdown_path", ""),
+            diff_from_version=data.get("diff_from_version", ""),
         )
-        entry.spec_name = data.get("spec_name", "")
-        return entry
 
     def _entry_to_dict(self, entry: ChangelogEntry) -> dict:
-        d: dict[str, Any] = {
+        return {
+            "spec_name": entry.spec_name,
             "version": entry.version,
             "release_date": entry.release_date.isoformat() if entry.release_date else None,
             "changes": [
@@ -420,9 +438,40 @@ class Storage:
                 } for c in entry.changes
             ],
             "notes": entry.notes,
+            "status": entry.status.value,
             "released": entry.released,
+            "released_by": entry.released_by,
+            "release_channel": entry.release_channel,
+            "markdown_path": entry.markdown_path,
+            "diff_from_version": entry.diff_from_version,
         }
-        spec_name = getattr(entry, "spec_name", "")
-        if spec_name:
-            d["spec_name"] = spec_name
-        return d
+
+    # ---------- Aggregation helpers ----------
+
+    def workspace_summary(self) -> dict[str, dict]:
+        """Build an aggregate summary grouped by service name."""
+        specs = self.list_stored_specs()
+        entries = self.load_changelog()
+
+        by_service: dict[str, dict] = {}
+        for name, version in specs:
+            by_service.setdefault(name, {"versions": [], "entries": []})
+            existing_versions = {v[0] for v in by_service[name]["versions"]}
+            if version not in existing_versions:
+                spec = self.load_stored_spec(name, version)
+                endpoint_count = len(spec.endpoints) if spec else 0
+                no_example_count = (
+                    len([e for e in spec.endpoints if not e.has_examples()])
+                    if spec else 0
+                )
+                by_service[name]["versions"].append((version, endpoint_count, no_example_count))
+
+        for e in entries:
+            by_service.setdefault(e.spec_name, {"versions": [], "entries": []})
+            by_service[e.spec_name]["entries"].append(e)
+
+        for data in by_service.values():
+            data["versions"].sort(key=lambda x: x[0], reverse=True)
+            data["entries"].sort(key=lambda x: x.version, reverse=True)
+
+        return by_service

@@ -181,6 +181,12 @@ class VersionDiff:
         return [endpoints[k] for k in changed_keys if k in endpoints and not endpoints[k].has_examples()]
 
 
+class ReleaseStatus(Enum):
+    """Release lifecycle status."""
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+
 @dataclass
 class ReleaseInfo:
     """Metadata for a release."""
@@ -192,9 +198,31 @@ class ReleaseInfo:
 
 @dataclass
 class ChangelogEntry:
-    """Stored changelog entry including notes and release info."""
+    """Stored changelog entry including notes and release info.
+
+    Primary key is (spec_name, version) to support multiple services
+    having the same version number independently.
+    """
+    spec_name: str
     version: str
     release_date: Optional[date] = None
     changes: list[Change] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-    released: bool = False
+    status: ReleaseStatus = ReleaseStatus.DRAFT
+    released_by: str = ""
+    release_channel: str = ""
+    markdown_path: str = ""
+    diff_from_version: str = ""
+
+    @property
+    def released(self) -> bool:
+        """Backward-compatible alias."""
+        return self.status == ReleaseStatus.PUBLISHED
+
+    @released.setter
+    def released(self, value: bool) -> None:
+        self.status = ReleaseStatus.PUBLISHED if value else ReleaseStatus.DRAFT
+
+    @property
+    def pending_count(self) -> int:
+        return len([c for c in self.changes if c.is_pending()])

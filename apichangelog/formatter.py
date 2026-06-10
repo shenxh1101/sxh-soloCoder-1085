@@ -14,7 +14,7 @@ from rich.tree import Tree
 
 from .models import (
     ApiSpec, EndpointDef, Change, ChangeType, ImpactLevel, ChangeScope,
-    VersionDiff, ChangelogEntry, ReleaseInfo
+    VersionDiff, ChangelogEntry, ReleaseInfo, ReleaseStatus
 )
 
 
@@ -169,15 +169,30 @@ class ConsoleFormatter:
                                filtered_changes: Optional[list[Change]] = None) -> None:
         changes = filtered_changes if filtered_changes is not None else entry.changes
         date_str = release_info.release_date.isoformat()
+        status_label = ("[bold green]PUBLISHED[/bold green]"
+                        if entry.status == ReleaseStatus.PUBLISHED
+                        else "[yellow]DRAFT[/yellow]")
+
+        meta_parts = [
+            f"[bold cyan]{entry.spec_name} {release_info.version}[/bold cyan]",
+            f"{status_label}",
+            f"[dim]Release date:[/dim] [bold]{date_str}[/bold]",
+            f"[dim]Modules:[/dim] [bold]{', '.join(release_info.modules)}[/bold]",
+            f"[dim]Total changes:[/dim] [bold]{len(changes)}[/bold]",
+        ]
+        if entry.released_by:
+            meta_parts.append(f"[dim]Released by:[/dim] {entry.released_by}")
+        if entry.release_channel:
+            meta_parts.append(f"[dim]Channel:[/dim] [magenta]{entry.release_channel}[/magenta]")
+        if entry.markdown_path:
+            meta_parts.append(f"[dim]Markdown:[/dim] [blue]{entry.markdown_path}[/blue]")
+        if entry.diff_from_version:
+            meta_parts.append(f"[dim]Diff from:[/dim] {entry.diff_from_version}")
+
         header = Panel.fit(
-            Text.from_markup(
-                f"[bold cyan]{release_info.version}[/bold cyan]\n"
-                f"[dim]Release date:[/dim] [bold]{date_str}[/bold]\n"
-                f"[dim]Modules:[/dim] [bold]{', '.join(release_info.modules)}[/bold]\n"
-                f"[dim]Total changes:[/dim] [bold]{len(changes)}[/bold]"
-            ),
+            Text.from_markup("\n".join(meta_parts)),
             title="Release Notes Preview",
-            border_style="green",
+            border_style=("green" if entry.status == ReleaseStatus.PUBLISHED else "yellow"),
         )
         self.console.print(header)
 
@@ -220,38 +235,127 @@ class ConsoleFormatter:
     # ---------- Versions output ----------
 
     def print_versions(self, specs: list[tuple[str, str]],
-                        entry_map: dict[str, ChangelogEntry]) -> None:
+                        entry_map: dict[tuple[str, str], ChangelogEntry]) -> None:
         table = Table(title="Saved API Specs & Changelogs", show_lines=True)
         table.add_column("Service", style="cyan bold")
         table.add_column("Version", style="green")
+        table.add_column("Status", style="magenta")
         table.add_column("Release Date", style="yellow")
-        table.add_column("Released", style="magenta")
+        table.add_column("By", style="blue")
+        table.add_column("Channel", style="magenta")
         table.add_column("Changes", justify="right")
         table.add_column("Pending", justify="right", style="red")
-        table.add_column("Modules", style="blue")
+        table.add_column("Markdown", style="cyan")
 
         if not specs:
             self.console.print("[dim]No saved specs found. Run 'scan --save' first.[/dim]")
             return
 
-        for name, version in specs:
-            entry = entry_map.get(version)
+        for name, version in sorted(specs, key=lambda x: (x[0], x[1]), reverse=True):
+            entry = entry_map.get((name, version))
             if entry:
+                if entry.status == ReleaseStatus.PUBLISHED:
+                    status = "[green]PUBLISHED[/green]"
+                else:
+                    status = "[yellow]DRAFT[/yellow]"
                 rel_date = entry.release_date.isoformat() if entry.release_date else "-"
-                released = "[green]Yes[/green]" if entry.released else "[dim]No[/dim]"
+                by = entry.released_by or "-"
+                channel = entry.release_channel or "-"
                 n_changes = len(entry.changes)
-                n_pending = len([c for c in entry.changes if c.is_pending()])
-                modules = ", ".join(sorted({c.module for c in entry.changes})) or "-"
+                n_pending = entry.pending_count
+                md_path = entry.markdown_path or "-"
             else:
+                status = "[dim]SCANNED[/dim]"
                 rel_date = "-"
-                released = "-"
+                by = "-"
+                channel = "-"
                 n_changes = 0
                 n_pending = 0
-                modules = "-"
-            table.add_row(name, version, rel_date, released,
-                          str(n_changes), str(n_pending), modules)
+                md_path = "-"
+            table.add_row(name, version, status, rel_date, by, channel,
+                          str(n_changes), str(n_pending), md_path)
 
         self.console.print(table)
+
+    # ---------- Workspace / Services output ----------
+
+    def print_workspace(self, summary: dict[str, dict]) -> None:
+        if not summary:
+            self.console.print("[dim]No services in workspace yet. Run 'scan --save' to add one.[/dim]")
+            return
+
+        self.console.print(Panel(
+            Text.from_markup(f"[bold cyan]{len(summary)}[/bold cyan] services tracked"),
+            title="Workspace Overview",
+            border_style="cyan",
+        ))
+        self.console.print()
+
+        for name in sorted(summary.keys()):
+            data = summary[name]
+            versions = data["versions"]
+            entries = data["entries"]
+
+            latest_version = versions[0][0] if versions else "?"
+            latest_entry = entries[0] if entries else None
+            total_pending = sum(e.pending_count for e in entries)
+            total_no_example = sum(v[2] for v in versions)
+            total_endpoints = sum(v[1] for v in versions)
+
+            if latest_entry:
+                if latest_entry.status == ReleaseStatus.PUBLISHED:
+                    latest_status = "[green]PUBLISHED[/green]"
+                    last_release = latest_entry.release_date.isoformat() if latest_entry.release_date else "-"
+                else:
+                    latest_status = "[yellow]DRAFT[/yellow]"
+                    last_release = latest_entry.release_date.isoformat() if latest_entry.release_date else "Not set"
+                diff_from = latest_entry.diff_from_version or "(manual)"
+                last_diff = f"{diff_from} -> {latest_entry.version}"
+            else:
+                latest_status = "[dim]NO DIFF[/dim]"
+                last_release = "-"
+                last_diff = "-"
+
+            tree = Tree(
+                f"[bold cyan]{name}[/bold cyan]  "
+                f"[dim]latest:[/dim] [green]{latest_version}[/green] {latest_status}  "
+                f"[dim]last release:[/dim] {last_release}"
+            )
+
+            tree.add(
+                f"[dim]Versions tracked:[/dim] {len(versions)}  |  "
+                f"[dim]Total endpoints:[/dim] {total_endpoints}  |  "
+                f"[dim]Missing examples:[/dim] [red]{total_no_example}[/red]  |  "
+                f"[dim]Pending review items:[/dim] [yellow]{total_pending}[/yellow]"
+            )
+            tree.add(
+                f"[dim]Last diff:[/dim] {last_diff}  "
+                f"([dim]changelogs:[/dim] {len(entries)})"
+            )
+
+            version_branch = tree.add("[bold]Version timeline[/bold]")
+            for ver, eps, noex in versions:
+                entry_for_ver = next((e for e in entries if e.version == ver), None)
+                tags: list[str] = []
+                if entry_for_ver:
+                    if entry_for_ver.status == ReleaseStatus.PUBLISHED:
+                        tags.append("[green]PUBLISHED[/green]")
+                    else:
+                        tags.append("[yellow]DRAFT[/yellow]")
+                    if entry_for_ver.changes:
+                        tags.append(f"[dim]{len(entry_for_ver.changes)} changes[/dim]")
+                    if entry_for_ver.pending_count:
+                        tags.append(f"[red]{entry_for_ver.pending_count} pending[/red]")
+                    if entry_for_ver.release_channel:
+                        tags.append(f"[magenta]{entry_for_ver.release_channel}[/magenta]")
+                tag_str = "  ".join(tags)
+                version_branch.add(
+                    f"[bold]{ver}[/bold]  [dim]{eps} eps, {noex} no-ex[/dim]  "
+                    + (tag_str if tag_str else "[dim]scanned only[/dim]")
+                )
+
+            self.console.print(tree)
+            self.console.print()
 
     # ---------- Review output ----------
 
@@ -260,9 +364,12 @@ class ConsoleFormatter:
         pending = [c for c in changes if c.is_pending()]
         confirmed = [c for c in changes if not c.is_pending()]
 
+        status_label = ("[bold green]PUBLISHED[/bold green]"
+                        if entry.status == ReleaseStatus.PUBLISHED
+                        else "[yellow]DRAFT[/yellow]")
         header = Panel.fit(
             Text.from_markup(
-                f"[bold]Version {entry.version}[/bold]\n"
+                f"[bold]{entry.spec_name} {entry.version}[/bold]  {status_label}\n"
                 f"[dim]Total:[/dim] {len(changes)}  "
                 f"[green]Confirmed:[/green] {len(confirmed)}  "
                 f"[red]Pending:[/red] {len(pending)}"

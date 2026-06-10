@@ -1,10 +1,11 @@
 """
 Command-line interface for API Changelog Tool.
-Provides commands: scan, diff, note, release, versions, review.
+Commands: scan, diff, note, release, versions, services, review.
 """
 
 import sys
 import io
+import os
 from pathlib import Path
 from datetime import date, datetime
 from typing import Optional
@@ -14,7 +15,7 @@ import click
 from . import __version__
 from .models import (
     ApiSpec, Change, ChangeType, ImpactLevel, ChangeScope,
-    VersionDiff, ChangelogEntry, ReleaseInfo
+    VersionDiff, ChangelogEntry, ReleaseInfo, ReleaseStatus
 )
 from .storage import Storage
 from .differ import Differ
@@ -29,19 +30,58 @@ def _setup_encoding():
         pass
 
 
-def _resolve_spec(ctx, param, value):
-    if not value:
-        return None
-    storage: Storage = ctx.obj["storage"]
-
-    if ":" in value and not Path(value).exists():
-        name, version = value.split(":", 1)
+def _parse_spec_ref(ref: str, ctx: click.Context, storage: Storage) -> ApiSpec:
+    """Parse `file_path.yaml` or `ServiceName:version` into an ApiSpec."""
+    if ":" in ref and not Path(ref).exists():
+        name, version = ref.split(":", 1)
         spec = storage.load_stored_spec(name, version)
         if spec is None:
-            raise click.BadParameter(f"Stored spec not found: {name}:{version}")
+            raise click.BadParameter(
+                f"Stored spec not found: {name}:{version}. "
+                f"Run 'scan <file> --save' first."
+            )
         return spec
-    else:
-        return storage.load_spec(value)
+    return storage.load_spec(ref)
+
+
+def _parse_entry_ref(ref: str) -> tuple[Optional[str], str]:
+    """Parse `[ServiceName:]version` into (spec_name, version).
+
+    spec_name is None when no service prefix was provided; caller must
+    handle ambiguity or error out if multiple services match.
+    """
+    if ":" in ref:
+        parts = ref.split(":", 1)
+        return parts[0], parts[1]
+    return None, ref
+
+
+def _resolve_entry(storage: Storage, ref: str, cmd: str) -> ChangelogEntry:
+    """Resolve an entry reference, with friendly error messages."""
+    spec_name, version = _parse_entry_ref(ref)
+
+    if spec_name:
+        entry = storage.get_entry(spec_name, version)
+        if entry is None:
+            raise click.BadParameter(
+                f"No changelog entry for {spec_name}:{version}. "
+                f"Run 'diff <old> {spec_name}:{version} --save' first."
+            )
+        return entry
+
+    entries = [e for e in storage.load_changelog() if e.version == version]
+    if not entries:
+        raise click.BadParameter(
+            f"No changelog entry for version {version}. "
+            f"Use '{cmd} ServiceName:{version}' or run diff --save first."
+        )
+    if len(entries) > 1:
+        names = ", ".join(f"{e.spec_name}:{version}" for e in entries)
+        raise click.BadParameter(
+            f"Multiple services have version {version}: {names}. "
+            f"Use '{cmd} ServiceName:{version}' to disambiguate."
+        )
+    return entries[0]
 
 
 @click.group()
@@ -63,17 +103,21 @@ def main(ctx: click.Context, base_dir: Optional[str]) -> None:
 # ============================================================
 
 @main.command()
-@click.argument("spec", callback=_resolve_spec, required=True)
+@click.argument("spec_ref", required=True)
 @click.option("--save", "save_spec", is_flag=True, default=False,
               help="Save the scanned spec to storage for later comparison")
 @click.option("--output", "-o", type=click.Path(), default=None,
               help="Output Markdown summary to file")
 @click.pass_context
-def scan(ctx: click.Context, spec: ApiSpec, save_spec: bool, output: Optional[str]) -> None:
-    """Read API spec file and list endpoints, fields, and missing examples."""
+def scan(ctx: click.Context, spec_ref: str, save_spec: bool, output: Optional[str]) -> None:
+    """Read API spec file and list endpoints, fields, and missing examples.
+
+    SPEC_REF: path to YAML/JSON file, or 'ServiceName:version' to re-read a saved spec.
+    """
     console: ConsoleFormatter = ctx.obj["console"]
     storage: Storage = ctx.obj["storage"]
 
+    spec = _parse_spec_ref(spec_ref, ctx, storage)
     console.print_spec_summary(spec)
 
     no_examples = [ep for ep in spec.endpoints if not ep.has_examples()]
@@ -113,10 +157,10 @@ def scan(ctx: click.Context, spec: ApiSpec, save_spec: bool, output: Optional[st
 # ============================================================
 
 @main.command()
-@click.argument("old_spec", callback=_resolve_spec, required=True)
-@click.argument("new_spec", callback=_resolve_spec, required=True)
+@click.argument("old_ref", required=True)
+@click.argument("new_ref", required=True)
 @click.option("--module", "-M", "modules", type=str, multiple=True,
-              help="Filter by module name (can be repeated, e.g. -M users -M auth)")
+              help="Filter by module name (repeatable)")
 @click.option("--output", "-o", type=click.Path(), default=None,
               help="Write full diff as Markdown to file")
 @click.option("--pending", "pending_output", type=click.Path(), default=None,
@@ -124,13 +168,19 @@ def scan(ctx: click.Context, spec: ApiSpec, save_spec: bool, output: Optional[st
 @click.option("--save", "save_changes", is_flag=True, default=False,
               help="Save diff as changelog entry for the new version")
 @click.pass_context
-def diff(ctx: click.Context, old_spec: ApiSpec, new_spec: ApiSpec,
+def diff(ctx: click.Context, old_ref: str, new_ref: str,
          modules: tuple[str, ...], output: Optional[str],
          pending_output: Optional[str], save_changes: bool) -> None:
-    """Compare two API versions and show additions, deletions, and field changes."""
+    """Compare two API versions and show additions, deletions, and field changes.
+
+    OLD_REF / NEW_REF: file path or 'ServiceName:version'.
+    """
     console: ConsoleFormatter = ctx.obj["console"]
     storage: Storage = ctx.obj["storage"]
     md: MarkdownFormatter = ctx.obj["markdown"]
+
+    old_spec = _parse_spec_ref(old_ref, ctx, storage)
+    new_spec = _parse_spec_ref(new_ref, ctx, storage)
 
     differ = Differ()
     version_diff = differ.compare(old_spec, new_spec)
@@ -154,12 +204,18 @@ def diff(ctx: click.Context, old_spec: ApiSpec, new_spec: ApiSpec,
         click.secho(f"[OK] Pending checklist written to: {pending_output}", fg="green")
 
     if save_changes:
-        entry = storage.get_entry(new_spec.version) or ChangelogEntry(version=new_spec.version)
+        entry = (storage.get_entry(new_spec.name, new_spec.version)
+                 or ChangelogEntry(spec_name=new_spec.name, version=new_spec.version))
         entry.changes = version_diff.changes
+        entry.diff_from_version = old_spec.version
         entry.spec_name = new_spec.name
         storage.upsert_entry(entry)
         click.echo()
-        click.secho(f"[OK] Changes saved for {new_spec.name}:{new_spec.version}", fg="green")
+        click.secho(
+            f"[OK] Changes saved for {new_spec.name}:{new_spec.version} "
+            f"(diff from {old_spec.version})",
+            fg="green",
+        )
 
 
 # ============================================================
@@ -167,7 +223,7 @@ def diff(ctx: click.Context, old_spec: ApiSpec, new_spec: ApiSpec,
 # ============================================================
 
 @main.command()
-@click.argument("version", required=True)
+@click.argument("entry_ref", required=True)
 @click.option("--change", "change_index", type=int, default=None,
               help="Index of specific change to annotate")
 @click.option("--note", "-n", "note_text", type=str, default=None,
@@ -183,22 +239,19 @@ def diff(ctx: click.Context, old_spec: ApiSpec, new_spec: ApiSpec,
 @click.option("--release-note", type=str, default=None,
               help="Add a release-level note")
 @click.pass_context
-def note(ctx: click.Context, version: str, change_index: Optional[int],
+def note(ctx: click.Context, entry_ref: str, change_index: Optional[int],
          note_text: Optional[str], migration: Optional[str],
          confirm: bool, impact: Optional[str], list_changes: bool,
          release_note: Optional[str]) -> None:
-    """Add manual notes, migration suggestions, and confirm changes."""
-    storage: Storage = ctx.obj["storage"]
+    """Add manual notes, migration suggestions, and confirm changes.
 
-    entry = storage.get_entry(version)
-    if entry is None:
-        raise click.BadParameter(
-            f"No changelog entry found for version {version}. "
-            "Run 'diff' with --save first."
-        )
+    ENTRY_REF: 'ServiceName:version' or just 'version' (if unambiguous).
+    """
+    storage: Storage = ctx.obj["storage"]
+    entry = _resolve_entry(storage, entry_ref, "note")
 
     if list_changes:
-        click.echo(f"Changes for version {version}:")
+        click.echo(f"Changes for {entry.spec_name}:{entry.version}:")
         for i, c in enumerate(entry.changes):
             status = "[OK]" if c.confirmed else "[PENDING]"
             tag = " [BREAKING]" if c.breaking else ""
@@ -253,32 +306,40 @@ def note(ctx: click.Context, version: str, change_index: Optional[int],
 # ============================================================
 
 @main.command()
-@click.argument("version", required=True)
+@click.argument("entry_ref", required=True)
 @click.option("--date", "release_date", type=str, default=None,
               help="Release date (YYYY-MM-DD, default: today)")
 @click.option("--highlight", "-h", "highlights", type=str, multiple=True,
-              help="Release highlight (can be repeated)")
+              help="Release highlight (repeatable)")
 @click.option("--module", "-M", "modules", type=str, multiple=True,
-              help="Filter by module name (can be repeated)")
+              help="Filter by module name (repeatable)")
 @click.option("--output", "-o", type=click.Path(), default=None,
               help="Write release notes as Markdown to file")
 @click.option("--no-preview", is_flag=True, default=False,
               help="Disable console preview")
+@click.option("--draft", is_flag=True, default=False,
+              help="Explicitly set status to DRAFT (useful after --publish)")
+@click.option("--publish", is_flag=True, default=False,
+              help="Mark release as PUBLISHED")
+@click.option("--published-by", type=str, default=None,
+              help="Record who performed the release (name/email)")
+@click.option("--channel", type=str, default=None,
+              help="Release channel, e.g. internal, public, stable, beta")
 @click.pass_context
-def release(ctx: click.Context, version: str, release_date: Optional[str],
+def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
             highlights: tuple[str, ...], modules: tuple[str, ...],
-            output: Optional[str], no_preview: bool) -> None:
-    """Generate module-level changelog summary, maintain version and release date."""
+            output: Optional[str], no_preview: bool,
+            draft: bool, publish: bool,
+            published_by: Optional[str], channel: Optional[str]) -> None:
+    """Generate changelog, maintain release metadata. Supports DRAFT/PUBLISHED status.
+
+    ENTRY_REF: 'ServiceName:version' or just 'version'.
+    """
     storage: Storage = ctx.obj["storage"]
     console: ConsoleFormatter = ctx.obj["console"]
     md: MarkdownFormatter = ctx.obj["markdown"]
 
-    entry = storage.get_entry(version)
-    if entry is None:
-        raise click.BadParameter(
-            f"No changelog entry found for version {version}. "
-            "Run 'diff' with --save first."
-        )
+    entry = _resolve_entry(storage, entry_ref, "release")
 
     if modules:
         module_set = set(modules)
@@ -297,14 +358,29 @@ def release(ctx: click.Context, version: str, release_date: Optional[str],
 
     entry_modules = sorted({c.module for c in filtered_changes})
     release_info = ReleaseInfo(
-        version=version,
+        version=entry.version,
         release_date=parsed_date,
         highlights=list(highlights),
         modules=entry_modules,
     )
 
     entry.release_date = parsed_date
-    entry.released = True
+    if published_by:
+        entry.released_by = published_by
+    if channel:
+        entry.release_channel = channel
+    if draft:
+        entry.status = ReleaseStatus.DRAFT
+    if publish:
+        entry.status = ReleaseStatus.PUBLISHED
+    if published_by and not publish and not draft:
+        entry.status = ReleaseStatus.PUBLISHED
+
+    resolved_md_path = ""
+    if output:
+        resolved_md_path = str(Path(output).resolve())
+        entry.markdown_path = resolved_md_path
+
     storage.upsert_entry(entry)
 
     if not no_preview:
@@ -314,13 +390,13 @@ def release(ctx: click.Context, version: str, release_date: Optional[str],
         content = md.render_release(entry, release_info, filtered_changes)
         Path(output).write_text(content, encoding="utf-8")
         click.echo()
-        click.secho(f"[OK] Release notes written to: {output}", fg="green")
+        click.secho(f"[OK] Release notes written to: {resolved_md_path}", fg="green")
 
     breaking_count = len([c for c in filtered_changes if c.breaking])
     added_count = len([c for c in filtered_changes if c.change_type == ChangeType.ADDED])
 
     click.echo()
-    click.secho(f"Version analysis for {version}:", fg="cyan")
+    click.secho(f"Version analysis for {entry.spec_name}:{entry.version}:", fg="cyan")
     click.echo(f"  Breaking changes: {breaking_count}")
     click.echo(f"  New additions: {added_count}")
 
@@ -332,6 +408,13 @@ def release(ctx: click.Context, version: str, release_date: Optional[str],
     else:
         suggested = "PATCH"
     click.secho(f"  Suggested semver bump: {suggested}", fg="yellow")
+
+    status = entry.status.value.upper()
+    click.echo(f"  Status: {status}")
+    if entry.released_by:
+        click.echo(f"  Released by: {entry.released_by}")
+    if entry.release_channel:
+        click.echo(f"  Channel: {entry.release_channel}")
 
     pending = [c for c in filtered_changes if c.is_pending()]
     if pending:
@@ -351,7 +434,7 @@ def release(ctx: click.Context, version: str, release_date: Optional[str],
               help="Filter by service name")
 @click.pass_context
 def versions(ctx: click.Context, service: Optional[str]) -> None:
-    """List locally saved API specs and changelog entries."""
+    """List saved specs and changelog entries across all services."""
     storage: Storage = ctx.obj["storage"]
     console: ConsoleFormatter = ctx.obj["console"]
 
@@ -360,11 +443,35 @@ def versions(ctx: click.Context, service: Optional[str]) -> None:
         specs = [(n, v) for n, v in specs if n == service]
 
     entries = storage.load_changelog()
-    entry_map: dict[str, ChangelogEntry] = {}
+    entry_map: dict[tuple[str, str], ChangelogEntry] = {}
     for e in entries:
-        entry_map[e.version] = e
+        if not service or e.spec_name == service:
+            entry_map[(e.spec_name, e.version)] = e
 
     console.print_versions(specs, entry_map)
+
+
+# ============================================================
+# services / workspace
+# ============================================================
+
+@main.command("services")
+@click.option("--service", "-s", type=str, default=None,
+              help="Show only a specific service")
+@click.pass_context
+def services_cmd(ctx: click.Context, service: Optional[str]) -> None:
+    """Workspace overview: grouped by service, with version lines and stats."""
+    storage: Storage = ctx.obj["storage"]
+    console: ConsoleFormatter = ctx.obj["console"]
+
+    summary = storage.workspace_summary()
+    if service:
+        if service not in summary:
+            click.secho(f"[!] Service '{service}' not found in workspace", fg="red")
+            sys.exit(1)
+        summary = {service: summary[service]}
+
+    console.print_workspace(summary)
 
 
 # ============================================================
@@ -372,31 +479,26 @@ def versions(ctx: click.Context, service: Optional[str]) -> None:
 # ============================================================
 
 @main.command()
-@click.argument("version", required=True)
+@click.argument("entry_ref", required=True)
 @click.option("--module", "-M", "modules", type=str, multiple=True,
               help="Filter by module name")
 @click.option("--confirm", "confirm_indices", type=str, default=None,
-              help="Confirm changes by index, e.g. --confirm 0,2,5 or --confirm all")
+              help="Confirm changes by index: --confirm 0,2,5 or --confirm all")
 @click.option("--migrate", type=str, default=None,
-              help="Add migration guide to a change, format: INDEX:GUIDE")
+              help="Add migration guide: --migrate INDEX:GUIDE")
 @click.option("--note", "-n", "note_text", type=str, default=None,
-              help="Add a note to a change, format: INDEX:NOTE")
+              help="Add a note: --note INDEX:NOTE")
 @click.pass_context
-def review(ctx: click.Context, version: str, modules: tuple[str, ...],
+def review(ctx: click.Context, entry_ref: str, modules: tuple[str, ...],
            confirm_indices: Optional[str], migrate: Optional[str],
            note_text: Optional[str]) -> None:
-    """Review pending changes: list unconfirmed items, batch confirm, add migration guides."""
+    """Review pending changes: list unconfirmed items, batch confirm, add notes."""
     storage: Storage = ctx.obj["storage"]
     console: ConsoleFormatter = ctx.obj["console"]
 
-    entry = storage.get_entry(version)
-    if entry is None:
-        raise click.BadParameter(
-            f"No changelog entry found for version {version}. "
-            "Run 'diff' with --save first."
-        )
+    entry = _resolve_entry(storage, entry_ref, "review")
 
-    changes = entry.changes
+    changes = list(entry.changes)
     if modules:
         module_set = set(modules)
         changes = [c for c in changes if c.module in module_set]
@@ -411,7 +513,7 @@ def review(ctx: click.Context, version: str, modules: tuple[str, ...],
             changes[i].confirmed = True
             click.secho(f"  [OK] Confirmed [{i}]: {changes[i].description}", fg="green")
         storage.upsert_entry(entry)
-        _print_pending_summary(entry, modules)
+        _print_pending_summary(changes)
 
     if migrate:
         idx, guide = _parse_indexed_value(migrate, "migrate")
@@ -420,7 +522,7 @@ def review(ctx: click.Context, version: str, modules: tuple[str, ...],
         changes[idx].migration_guide = guide
         storage.upsert_entry(entry)
         click.secho(f"  [OK] Migration guide added to [{idx}]", fg="green")
-        _print_pending_summary(entry, modules)
+        _print_pending_summary(changes)
 
     if note_text:
         idx, text = _parse_indexed_value(note_text, "note")
@@ -429,7 +531,7 @@ def review(ctx: click.Context, version: str, modules: tuple[str, ...],
         changes[idx].notes.append(text)
         storage.upsert_entry(entry)
         click.secho(f"  [OK] Note added to [{idx}]", fg="green")
-        _print_pending_summary(entry, modules)
+        _print_pending_summary(changes)
 
 
 def _parse_indices(value: str, max_len: int) -> list[int]:
@@ -443,7 +545,9 @@ def _parse_indices(value: str, max_len: int) -> list[int]:
 
 def _parse_indexed_value(value: str, option_name: str) -> tuple[int, str]:
     if ":" not in value:
-        raise click.BadParameter(f"--{option_name} format: INDEX:TEXT, e.g. 2:Update your client code")
+        raise click.BadParameter(
+            f"--{option_name} format: INDEX:TEXT, e.g. 2:Update your client code"
+        )
     idx_str, text = value.split(":", 1)
     try:
         idx = int(idx_str.strip())
@@ -452,14 +556,13 @@ def _parse_indexed_value(value: str, option_name: str) -> tuple[int, str]:
     return idx, text.strip()
 
 
-def _print_pending_summary(entry: ChangelogEntry, modules: tuple[str, ...]) -> None:
-    changes = entry.changes
-    if modules:
-        changes = [c for c in changes if c.module in set(modules)]
+def _print_pending_summary(changes: list[Change]) -> None:
     pending = [c for c in changes if c.is_pending()]
     confirmed = len(changes) - len(pending)
-    click.echo()
-    click.echo(f"  Progress: {confirmed}/{len(changes)} confirmed, {len(pending)} pending")
+    click.echo(
+        f"  Progress: {confirmed}/{len(changes)} confirmed, "
+        f"{len(pending)} pending"
+    )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,93 @@
+name: OrderService
+version: "1.0.0"
+base_url: https://api.example.com/orders/v1
+description: Order management service
+
+endpoints:
+  - path: /orders
+    method: GET
+    module: orders
+    summary: List orders
+    description: List all orders with pagination
+    parameters:
+      - name: page
+        location: query
+        type: integer
+        required: false
+        default: 1
+      - name: status
+        location: query
+        type: string
+        required: false
+    responses:
+      - status_code: 200
+        content_type: application/json
+        description: List of orders
+        fields:
+          - name: orders
+            type: array
+            required: true
+          - name: count
+            type: integer
+            required: true
+        example:
+          orders: [{id: 1001, amount: 99.0}]
+          count: 1
+
+  - path: /orders/{id}
+    method: GET
+    module: orders
+    summary: Get order by ID
+    parameters:
+      - name: id
+        location: path
+        type: integer
+        required: true
+    responses:
+      - status_code: 200
+        content_type: application/json
+        description: Order object
+        fields:
+          - name: id
+            type: integer
+            required: true
+          - name: amount
+            type: number
+            required: true
+          - name: user_id
+            type: integer
+            required: true
+          - name: status
+            type: string
+            required: true
+        example:
+          id: 1001
+          amount: 99.0
+          user_id: 1
+          status: pending
+
+  - path: /payments
+    method: POST
+    module: payments
+    summary: Create payment
+    request:
+      content_type: application/json
+      fields:
+        - name: order_id
+          type: integer
+          required: true
+        - name: method
+          type: string
+          required: true
+      example:
+        order_id: 1001
+        method: credit_card
+    responses:
+      - status_code: 201
+        content_type: application/json
+        fields:
+          - name: payment_id
+            type: integer
+            required: true
+        example:
+          payment_id: 5001

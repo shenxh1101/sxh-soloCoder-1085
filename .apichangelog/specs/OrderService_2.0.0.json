@@ -1,0 +1,293 @@
+{
+  "name": "OrderService",
+  "version": "2.0.0",
+  "base_url": "https://api.example.com/orders/v2",
+  "description": "Order management service v2 with multi-currency support",
+  "endpoints": [
+    {
+      "path": "/orders",
+      "method": "GET",
+      "module": "orders",
+      "summary": "List orders with filters",
+      "description": "List all orders with rich filtering",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "cursor",
+          "location": "query",
+          "type": "string",
+          "required": false,
+          "description": "Pagination cursor"
+        },
+        {
+          "name": "limit",
+          "location": "query",
+          "type": "integer",
+          "required": false,
+          "description": "",
+          "default": 50
+        },
+        {
+          "name": "status",
+          "location": "query",
+          "type": "string",
+          "required": true,
+          "description": "Filter by status (required)"
+        }
+      ],
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "items",
+              "type": "array",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "total",
+              "type": "integer",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "next_cursor",
+              "type": "string",
+              "required": false,
+              "description": ""
+            }
+          ],
+          "example": {
+            "items": [
+              {
+                "order_id": "ORD-0001",
+                "total_amount": {
+                  "value": 99.0,
+                  "currency": "USD"
+                }
+              }
+            ],
+            "total": 1
+          },
+          "description": "List of orders"
+        }
+      ]
+    },
+    {
+      "path": "/orders/{id}",
+      "method": "GET",
+      "module": "orders",
+      "summary": "Get order by ID",
+      "description": "",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "id",
+          "location": "path",
+          "type": "string",
+          "required": true,
+          "description": "Order ID string format ORD-XXXX"
+        }
+      ],
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "order_id",
+              "type": "string",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "total_amount",
+              "type": "object",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "user_uuid",
+              "type": "string",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "created_at",
+              "type": "string",
+              "required": true,
+              "description": ""
+            }
+          ],
+          "example": {
+            "order_id": "ORD-0001",
+            "total_amount": {
+              "value": 99.0,
+              "currency": "USD"
+            },
+            "user_uuid": "a1b2-c3d4",
+            "status": "paid",
+            "created_at": "2026-01-15T10:30:00Z"
+          },
+          "description": "Order object"
+        }
+      ]
+    },
+    {
+      "path": "/orders/{id}",
+      "method": "PATCH",
+      "module": "orders",
+      "summary": "Update order status",
+      "description": "",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "id",
+          "location": "path",
+          "type": "string",
+          "required": true,
+          "description": ""
+        }
+      ],
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "order_id",
+              "type": "string",
+              "required": true,
+              "description": ""
+            }
+          ],
+          "description": ""
+        }
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "status",
+            "type": "string",
+            "required": true,
+            "description": ""
+          }
+        ],
+        "example": {
+          "status": "shipped"
+        }
+      }
+    },
+    {
+      "path": "/payments",
+      "method": "POST",
+      "module": "payments",
+      "summary": "Create payment (multi-method)",
+      "description": "",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [],
+      "responses": [
+        {
+          "status_code": 201,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "transaction_id",
+              "type": "string",
+              "required": true,
+              "description": ""
+            }
+          ],
+          "example": {
+            "transaction_id": "TXN-abc123"
+          },
+          "description": ""
+        }
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "string",
+            "required": true,
+            "description": ""
+          },
+          {
+            "name": "method",
+            "type": "string",
+            "required": true,
+            "description": "credit_card, alipay, wechat, crypto"
+          },
+          {
+            "name": "currency",
+            "type": "string",
+            "required": false,
+            "description": "",
+            "default": "USD"
+          }
+        ],
+        "example": {
+          "order_id": "ORD-0001",
+          "method": "alipay",
+          "currency": "CNY"
+        }
+      }
+    },
+    {
+      "path": "/refunds",
+      "method": "POST",
+      "module": "payments",
+      "summary": "Request refund",
+      "description": "",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [],
+      "responses": [
+        {
+          "status_code": 201,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "refund_id",
+              "type": "string",
+              "required": true,
+              "description": ""
+            }
+          ],
+          "description": ""
+        }
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "string",
+            "required": true,
+            "description": ""
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "required": true,
+            "description": ""
+          }
+        ]
+      }
+    }
+  ]
+}

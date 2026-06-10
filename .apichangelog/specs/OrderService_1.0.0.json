@@ -1,0 +1,170 @@
+{
+  "name": "OrderService",
+  "version": "1.0.0",
+  "base_url": "https://api.example.com/orders/v1",
+  "description": "Order management service",
+  "endpoints": [
+    {
+      "path": "/orders",
+      "method": "GET",
+      "module": "orders",
+      "summary": "List orders",
+      "description": "List all orders with pagination",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "page",
+          "location": "query",
+          "type": "integer",
+          "required": false,
+          "description": "",
+          "default": 1
+        },
+        {
+          "name": "status",
+          "location": "query",
+          "type": "string",
+          "required": false,
+          "description": ""
+        }
+      ],
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "orders",
+              "type": "array",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "count",
+              "type": "integer",
+              "required": true,
+              "description": ""
+            }
+          ],
+          "example": {
+            "orders": [
+              {
+                "id": 1001,
+                "amount": 99.0
+              }
+            ],
+            "count": 1
+          },
+          "description": "List of orders"
+        }
+      ]
+    },
+    {
+      "path": "/orders/{id}",
+      "method": "GET",
+      "module": "orders",
+      "summary": "Get order by ID",
+      "description": "",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "id",
+          "location": "path",
+          "type": "integer",
+          "required": true,
+          "description": ""
+        }
+      ],
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "id",
+              "type": "integer",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "amount",
+              "type": "number",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "user_id",
+              "type": "integer",
+              "required": true,
+              "description": ""
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "required": true,
+              "description": ""
+            }
+          ],
+          "example": {
+            "id": 1001,
+            "amount": 99.0,
+            "user_id": 1,
+            "status": "pending"
+          },
+          "description": "Order object"
+        }
+      ]
+    },
+    {
+      "path": "/payments",
+      "method": "POST",
+      "module": "payments",
+      "summary": "Create payment",
+      "description": "",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [],
+      "responses": [
+        {
+          "status_code": 201,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "payment_id",
+              "type": "integer",
+              "required": true,
+              "description": ""
+            }
+          ],
+          "example": {
+            "payment_id": 5001
+          },
+          "description": ""
+        }
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "order_id",
+            "type": "integer",
+            "required": true,
+            "description": ""
+          },
+          {
+            "name": "method",
+            "type": "string",
+            "required": true,
+            "description": ""
+          }
+        ],
+        "example": {
+          "order_id": 1001,
+          "method": "credit_card"
+        }
+      }
+    }
+  ]
+}

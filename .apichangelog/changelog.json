@@ -1,5 +1,6 @@
 [
   {
+    "spec_name": "UserService",
     "version": "2.0.0",
     "release_date": "2026-06-10",
     "changes": [
@@ -27,7 +28,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
         "migration_guide": ""
       },
@@ -48,9 +49,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Add status=active query parameter to all GET /users requests"
+        "migration_guide": ""
       },
       {
         "change_type": "added",
@@ -83,9 +84,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Map new response fields: items replaces data, total_count replaces total"
+        "migration_guide": ""
       },
       {
         "change_type": "removed",
@@ -111,9 +112,9 @@
         ],
         "impact": "breaking",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Rename data to items and total to total_count in response parsing"
+        "migration_guide": ""
       },
       {
         "change_type": "modified",
@@ -132,7 +133,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
         "migration_guide": ""
       },
@@ -153,9 +154,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Change user ID parameter from integer to UUID string"
+        "migration_guide": ""
       },
       {
         "change_type": "added",
@@ -181,9 +182,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Parse new status and created_at fields from response"
+        "migration_guide": ""
       },
       {
         "change_type": "removed",
@@ -202,9 +203,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Remove role field parsing, use status instead"
+        "migration_guide": ""
       },
       {
         "change_type": "modified",
@@ -230,9 +231,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Update id field type from integer to string (UUID)"
+        "migration_guide": ""
       },
       {
         "change_type": "added",
@@ -243,7 +244,7 @@
         "field_changes": [],
         "impact": "low",
         "breaking": false,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
         "migration_guide": ""
       },
@@ -256,7 +257,7 @@
         "field_changes": [],
         "impact": "medium",
         "breaking": false,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
         "migration_guide": ""
       },
@@ -277,7 +278,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
         "migration_guide": ""
       },
@@ -290,7 +291,7 @@
         "field_changes": [],
         "impact": "low",
         "breaking": false,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
         "migration_guide": ""
       },
@@ -311,7 +312,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
         "migration_guide": ""
       },
@@ -332,13 +333,442 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": true,
+        "confirmed": false,
         "notes": [],
-        "migration_guide": "Update id field parsing from integer to string UUID"
+        "migration_guide": ""
       }
     ],
     "notes": [],
+    "status": "published",
     "released": true,
-    "spec_name": "UserService"
+    "released_by": "alice@example.com",
+    "release_channel": "public",
+    "markdown_path": "D:\\code\\TraeProjects\\1085\\examples\\RELEASE_UserService_2.0.0.md",
+    "diff_from_version": "1.0.0"
+  },
+  {
+    "spec_name": "OrderService",
+    "version": "2.0.0",
+    "release_date": null,
+    "changes": [
+      {
+        "change_type": "modified",
+        "scope": "endpoint",
+        "endpoint_key": "GET /orders",
+        "module": "orders",
+        "description": "Endpoint metadata updated: GET /orders",
+        "field_changes": [
+          {
+            "field_name": "summary",
+            "change_type": "modified",
+            "old_value": "List orders",
+            "new_value": "List orders with filters",
+            "property_changed": "summary"
+          },
+          {
+            "field_name": "description",
+            "change_type": "modified",
+            "old_value": "List all orders with pagination",
+            "new_value": "List all orders with rich filtering",
+            "property_changed": "description"
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "parameter",
+        "endpoint_key": "GET /orders",
+        "module": "orders",
+        "description": "New query parameter: cursor",
+        "field_changes": [
+          {
+            "field_name": "cursor",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string",
+            "property_changed": null
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "parameter",
+        "endpoint_key": "GET /orders",
+        "module": "orders",
+        "description": "New query parameter: limit",
+        "field_changes": [
+          {
+            "field_name": "limit",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "integer",
+            "property_changed": null
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "removed",
+        "scope": "parameter",
+        "endpoint_key": "GET /orders",
+        "module": "orders",
+        "description": "Removed query parameter: page",
+        "field_changes": [
+          {
+            "field_name": "page",
+            "change_type": "removed",
+            "old_value": "integer",
+            "new_value": null,
+            "property_changed": null
+          }
+        ],
+        "impact": "medium",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "parameter",
+        "endpoint_key": "GET /orders",
+        "module": "orders",
+        "description": "Parameter query:status modified",
+        "field_changes": [
+          {
+            "field_name": "status",
+            "change_type": "modified",
+            "old_value": false,
+            "new_value": true,
+            "property_changed": "required"
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "field",
+        "endpoint_key": "GET /orders",
+        "module": "orders",
+        "description": "Response 200 fields added: items, next_cursor, total",
+        "field_changes": [
+          {
+            "field_name": "items",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "array (required)",
+            "property_changed": null
+          },
+          {
+            "field_name": "next_cursor",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string",
+            "property_changed": null
+          },
+          {
+            "field_name": "total",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "integer (required)",
+            "property_changed": null
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "removed",
+        "scope": "field",
+        "endpoint_key": "GET /orders",
+        "module": "orders",
+        "description": "Response 200 fields removed: count, orders",
+        "field_changes": [
+          {
+            "field_name": "count",
+            "change_type": "removed",
+            "old_value": "integer (required)",
+            "new_value": null,
+            "property_changed": null
+          },
+          {
+            "field_name": "orders",
+            "change_type": "removed",
+            "old_value": "array (required)",
+            "new_value": null,
+            "property_changed": null
+          }
+        ],
+        "impact": "breaking",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "parameter",
+        "endpoint_key": "GET /orders/{id}",
+        "module": "orders",
+        "description": "Parameter path:id modified",
+        "field_changes": [
+          {
+            "field_name": "id",
+            "change_type": "modified",
+            "old_value": "integer",
+            "new_value": "string",
+            "property_changed": "type"
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "field",
+        "endpoint_key": "GET /orders/{id}",
+        "module": "orders",
+        "description": "Response 200 fields added: created_at, order_id, total_amount, user_uuid",
+        "field_changes": [
+          {
+            "field_name": "created_at",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string (required)",
+            "property_changed": null
+          },
+          {
+            "field_name": "order_id",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string (required)",
+            "property_changed": null
+          },
+          {
+            "field_name": "total_amount",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "object (required)",
+            "property_changed": null
+          },
+          {
+            "field_name": "user_uuid",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string (required)",
+            "property_changed": null
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "removed",
+        "scope": "field",
+        "endpoint_key": "GET /orders/{id}",
+        "module": "orders",
+        "description": "Response 200 fields removed: amount, id, user_id",
+        "field_changes": [
+          {
+            "field_name": "amount",
+            "change_type": "removed",
+            "old_value": "number (required)",
+            "new_value": null,
+            "property_changed": null
+          },
+          {
+            "field_name": "id",
+            "change_type": "removed",
+            "old_value": "integer (required)",
+            "new_value": null,
+            "property_changed": null
+          },
+          {
+            "field_name": "user_id",
+            "change_type": "removed",
+            "old_value": "integer (required)",
+            "new_value": null,
+            "property_changed": null
+          }
+        ],
+        "impact": "breaking",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "endpoint",
+        "endpoint_key": "PATCH /orders/{id}",
+        "module": "orders",
+        "description": "New endpoint added: PATCH /orders/{id}",
+        "field_changes": [],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "endpoint",
+        "endpoint_key": "POST /payments",
+        "module": "payments",
+        "description": "Endpoint metadata updated: POST /payments",
+        "field_changes": [
+          {
+            "field_name": "summary",
+            "change_type": "modified",
+            "old_value": "Create payment",
+            "new_value": "Create payment (multi-method)",
+            "property_changed": "summary"
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": true,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "field",
+        "endpoint_key": "POST /payments",
+        "module": "payments",
+        "description": "Request fields added: currency",
+        "field_changes": [
+          {
+            "field_name": "currency",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string",
+            "property_changed": null
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": true,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "field",
+        "endpoint_key": "POST /payments",
+        "module": "payments",
+        "description": "Request fields modified: method, order_id",
+        "field_changes": [
+          {
+            "field_name": "method",
+            "change_type": "modified",
+            "old_value": "",
+            "new_value": "credit_card, alipay, wechat, crypto",
+            "property_changed": "description"
+          },
+          {
+            "field_name": "order_id",
+            "change_type": "modified",
+            "old_value": "integer",
+            "new_value": "string",
+            "property_changed": "type"
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": true,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "field",
+        "endpoint_key": "POST /payments",
+        "module": "payments",
+        "description": "Response 201 fields added: transaction_id",
+        "field_changes": [
+          {
+            "field_name": "transaction_id",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string (required)",
+            "property_changed": null
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": true,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "removed",
+        "scope": "field",
+        "endpoint_key": "POST /payments",
+        "module": "payments",
+        "description": "Response 201 fields removed: payment_id",
+        "field_changes": [
+          {
+            "field_name": "payment_id",
+            "change_type": "removed",
+            "old_value": "integer (required)",
+            "new_value": null,
+            "property_changed": null
+          }
+        ],
+        "impact": "breaking",
+        "breaking": true,
+        "confirmed": true,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "endpoint",
+        "endpoint_key": "POST /refunds",
+        "module": "payments",
+        "description": "New endpoint added: POST /refunds",
+        "field_changes": [],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": true,
+        "notes": [],
+        "migration_guide": ""
+      }
+    ],
+    "notes": [],
+    "status": "draft",
+    "released": false,
+    "released_by": "",
+    "release_channel": "",
+    "markdown_path": "",
+    "diff_from_version": "1.0.0"
   }
 ]
