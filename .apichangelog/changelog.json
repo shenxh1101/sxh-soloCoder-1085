@@ -1,0 +1,345 @@
+[
+  {
+    "version": "2.0.0",
+    "release_date": "2026-06-10",
+    "changes": [
+      {
+        "change_type": "modified",
+        "scope": "endpoint",
+        "endpoint_key": "GET /users",
+        "module": "users",
+        "description": "Endpoint metadata updated: GET /users",
+        "field_changes": [
+          {
+            "field_name": "summary",
+            "change_type": "modified",
+            "old_value": "List all users",
+            "new_value": "List all users with filters",
+            "property_changed": "summary"
+          },
+          {
+            "field_name": "description",
+            "change_type": "modified",
+            "old_value": "Returns a paginated list of users",
+            "new_value": "Returns a paginated list of users with filtering support",
+            "property_changed": "description"
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "parameter",
+        "endpoint_key": "GET /users",
+        "module": "users",
+        "description": "New query parameter: status (required)",
+        "field_changes": [
+          {
+            "field_name": "status",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string",
+            "property_changed": null
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": true,
+        "notes": [
+          "Required query parameter for filtering by user status"
+        ],
+        "migration_guide": "Add status=active to your GET /users requests to maintain existing behavior"
+      },
+      {
+        "change_type": "added",
+        "scope": "field",
+        "endpoint_key": "GET /users",
+        "module": "users",
+        "description": "Response 200 fields added: items, page_info, total_count",
+        "field_changes": [
+          {
+            "field_name": "items",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "array (required)",
+            "property_changed": null
+          },
+          {
+            "field_name": "page_info",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "object",
+            "property_changed": null
+          },
+          {
+            "field_name": "total_count",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "integer (required)",
+            "property_changed": null
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "removed",
+        "scope": "field",
+        "endpoint_key": "GET /users",
+        "module": "users",
+        "description": "Response 200 fields removed: data, total",
+        "field_changes": [
+          {
+            "field_name": "data",
+            "change_type": "removed",
+            "old_value": "array (required)",
+            "new_value": null,
+            "property_changed": null
+          },
+          {
+            "field_name": "total",
+            "change_type": "removed",
+            "old_value": "integer (required)",
+            "new_value": null,
+            "property_changed": null
+          }
+        ],
+        "impact": "breaking",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "endpoint",
+        "endpoint_key": "GET /users/{id}",
+        "module": "users",
+        "description": "Endpoint metadata updated: GET /users/{id}",
+        "field_changes": [
+          {
+            "field_name": "description",
+            "change_type": "modified",
+            "old_value": "Returns a single user",
+            "new_value": "Returns a single user with extended profile",
+            "property_changed": "description"
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "parameter",
+        "endpoint_key": "GET /users/{id}",
+        "module": "users",
+        "description": "Parameter path:id modified",
+        "field_changes": [
+          {
+            "field_name": "id",
+            "change_type": "modified",
+            "old_value": "integer",
+            "new_value": "string",
+            "property_changed": "type"
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "field",
+        "endpoint_key": "GET /users/{id}",
+        "module": "users",
+        "description": "Response 200 fields added: created_at, status",
+        "field_changes": [
+          {
+            "field_name": "created_at",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string (required)",
+            "property_changed": null
+          },
+          {
+            "field_name": "status",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string (required)",
+            "property_changed": null
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "removed",
+        "scope": "field",
+        "endpoint_key": "GET /users/{id}",
+        "module": "users",
+        "description": "Response 200 fields removed: role",
+        "field_changes": [
+          {
+            "field_name": "role",
+            "change_type": "removed",
+            "old_value": "string",
+            "new_value": null,
+            "property_changed": null
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "field",
+        "endpoint_key": "GET /users/{id}",
+        "module": "users",
+        "description": "Response 200 fields modified: id",
+        "field_changes": [
+          {
+            "field_name": "id",
+            "change_type": "modified",
+            "old_value": "integer",
+            "new_value": "string",
+            "property_changed": "type"
+          },
+          {
+            "field_name": "id",
+            "change_type": "modified",
+            "old_value": "",
+            "new_value": "User UUID",
+            "property_changed": "description"
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "endpoint",
+        "endpoint_key": "PATCH /users/{id}",
+        "module": "users",
+        "description": "New endpoint added: PATCH /users/{id}",
+        "field_changes": [],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "deprecated",
+        "scope": "endpoint",
+        "endpoint_key": "POST /auth/login",
+        "module": "auth",
+        "description": "Endpoint deprecated: POST /auth/login",
+        "field_changes": [],
+        "impact": "medium",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "endpoint",
+        "endpoint_key": "POST /auth/login",
+        "module": "auth",
+        "description": "Endpoint metadata updated: POST /auth/login",
+        "field_changes": [
+          {
+            "field_name": "description",
+            "change_type": "modified",
+            "old_value": "Authenticate user and return token",
+            "new_value": "Authenticate user and return token (deprecated)",
+            "property_changed": "description"
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "endpoint",
+        "endpoint_key": "POST /auth/token",
+        "module": "auth",
+        "description": "New endpoint added: POST /auth/token",
+        "field_changes": [],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "added",
+        "scope": "field",
+        "endpoint_key": "POST /users",
+        "module": "users",
+        "description": "Request fields added: status",
+        "field_changes": [
+          {
+            "field_name": "status",
+            "change_type": "added",
+            "old_value": null,
+            "new_value": "string",
+            "property_changed": null
+          }
+        ],
+        "impact": "low",
+        "breaking": false,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      },
+      {
+        "change_type": "modified",
+        "scope": "field",
+        "endpoint_key": "POST /users",
+        "module": "users",
+        "description": "Response 201 fields modified: id",
+        "field_changes": [
+          {
+            "field_name": "id",
+            "change_type": "modified",
+            "old_value": "integer",
+            "new_value": "string",
+            "property_changed": "type"
+          }
+        ],
+        "impact": "high",
+        "breaking": true,
+        "confirmed": false,
+        "notes": [],
+        "migration_guide": ""
+      }
+    ],
+    "notes": [],
+    "released": true
+  }
+]

@@ -1,0 +1,482 @@
+{
+  "name": "UserService",
+  "version": "2.0.0",
+  "base_url": "https://api.example.com/v2",
+  "description": "User management service API v2",
+  "endpoints": [
+    {
+      "path": "/users",
+      "method": "GET",
+      "module": "users",
+      "summary": "List all users with filters",
+      "description": "Returns a paginated list of users with filtering support",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "page",
+          "location": "query",
+          "type": "integer",
+          "required": false,
+          "description": "Page number",
+          "default": 1,
+          "example": null
+        },
+        {
+          "name": "limit",
+          "location": "query",
+          "type": "integer",
+          "required": false,
+          "description": "Items per page",
+          "default": 20,
+          "example": null
+        },
+        {
+          "name": "status",
+          "location": "query",
+          "type": "string",
+          "required": true,
+          "description": "Filter by user status (active, inactive)",
+          "default": null,
+          "example": null
+        }
+      ],
+      "request": null,
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "items",
+              "type": "array",
+              "required": true,
+              "description": "List of users",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "total_count",
+              "type": "integer",
+              "required": true,
+              "description": "Total count",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "page_info",
+              "type": "object",
+              "required": false,
+              "description": "Pagination metadata",
+              "default": null,
+              "example": null,
+              "enum": null
+            }
+          ],
+          "example": {
+            "items": [
+              {
+                "id": 1,
+                "name": "John Doe",
+                "email": "john@example.com",
+                "status": "active"
+              }
+            ],
+            "total_count": 1
+          },
+          "description": "Successful response"
+        }
+      ]
+    },
+    {
+      "path": "/users/{id}",
+      "method": "GET",
+      "module": "users",
+      "summary": "Get user by ID",
+      "description": "Returns a single user with extended profile",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "id",
+          "location": "path",
+          "type": "string",
+          "required": true,
+          "description": "User UUID",
+          "default": null,
+          "example": null
+        }
+      ],
+      "request": null,
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string",
+              "required": true,
+              "description": "User UUID",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "name",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "email",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "created_at",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            }
+          ],
+          "example": {
+            "id": "a1b2c3-d4e5-f6g7",
+            "name": "John Doe",
+            "email": "john@example.com",
+            "status": "active",
+            "created_at": "2024-01-15T10:30:00Z"
+          },
+          "description": "User object"
+        }
+      ]
+    },
+    {
+      "path": "/users",
+      "method": "POST",
+      "module": "users",
+      "summary": "Create a new user",
+      "description": "",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "description": "Full name",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "description": "Email address",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "required": false,
+            "description": "Initial status",
+            "default": "active",
+            "example": null,
+            "enum": null
+          }
+        ],
+        "example": {
+          "name": "Jane Smith",
+          "email": "jane@example.com",
+          "status": "active"
+        }
+      },
+      "responses": [
+        {
+          "status_code": 201,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            }
+          ],
+          "example": {
+            "id": "h8i9j0-k1l2-m3n4"
+          },
+          "description": "Created user"
+        }
+      ]
+    },
+    {
+      "path": "/users/{id}",
+      "method": "PATCH",
+      "module": "users",
+      "summary": "Update user partial fields",
+      "description": "Update specific fields of a user",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [
+        {
+          "name": "id",
+          "location": "path",
+          "type": "string",
+          "required": true,
+          "description": "User UUID",
+          "default": null,
+          "example": null
+        }
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": false,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "required": false,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "required": false,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          }
+        ],
+        "example": null
+      },
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "id",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            }
+          ],
+          "example": null,
+          "description": "Updated user"
+        }
+      ]
+    },
+    {
+      "path": "/auth/login",
+      "method": "POST",
+      "module": "auth",
+      "summary": "User login",
+      "description": "Authenticate user and return token (deprecated)",
+      "deprecated": true,
+      "tags": [],
+      "parameters": [],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "username",
+            "type": "string",
+            "required": true,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "required": true,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          }
+        ],
+        "example": {
+          "username": "john",
+          "password": "secret123"
+        }
+      },
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "token",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "expires_in",
+              "type": "integer",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            }
+          ],
+          "example": {
+            "token": "eyJhbGciOiJ...",
+            "expires_in": 3600
+          },
+          "description": "Login successful"
+        }
+      ]
+    },
+    {
+      "path": "/auth/token",
+      "method": "POST",
+      "module": "auth",
+      "summary": "Obtain access token",
+      "description": "New authentication endpoint with OAuth2 support",
+      "deprecated": false,
+      "tags": [],
+      "parameters": [],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "grant_type",
+            "type": "string",
+            "required": true,
+            "description": "password or refresh_token",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "username",
+            "type": "string",
+            "required": false,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "required": false,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          },
+          {
+            "name": "refresh_token",
+            "type": "string",
+            "required": false,
+            "description": "",
+            "default": null,
+            "example": null,
+            "enum": null
+          }
+        ],
+        "example": null
+      },
+      "responses": [
+        {
+          "status_code": 200,
+          "content_type": "application/json",
+          "fields": [
+            {
+              "name": "access_token",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "refresh_token",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "expires_in",
+              "type": "integer",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            },
+            {
+              "name": "token_type",
+              "type": "string",
+              "required": true,
+              "description": "",
+              "default": null,
+              "example": null,
+              "enum": null
+            }
+          ],
+          "example": null,
+          "description": "Token response"
+        }
+      ]
+    }
+  ]
+}

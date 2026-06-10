@@ -1,0 +1,139 @@
+name: UserService
+version: "1.0.0"
+base_url: https://api.example.com/v1
+description: User management service API
+
+endpoints:
+  - path: /users
+    method: GET
+    module: users
+    summary: List all users
+    description: Returns a paginated list of users
+    parameters:
+      - name: page
+        location: query
+        type: integer
+        required: false
+        description: Page number
+        default: 1
+      - name: limit
+        location: query
+        type: integer
+        required: false
+        description: Items per page
+        default: 20
+    responses:
+      - status_code: 200
+        content_type: application/json
+        description: Successful response
+        fields:
+          - name: data
+            type: array
+            required: true
+            description: List of users
+          - name: total
+            type: integer
+            required: true
+            description: Total count
+        example:
+          data:
+            - id: 1
+              name: "John Doe"
+              email: "john@example.com"
+          total: 1
+
+  - path: /users/{id}
+    method: GET
+    module: users
+    summary: Get user by ID
+    description: Returns a single user
+    parameters:
+      - name: id
+        location: path
+        type: integer
+        required: true
+        description: User ID
+    responses:
+      - status_code: 200
+        content_type: application/json
+        description: User object
+        fields:
+          - name: id
+            type: integer
+            required: true
+          - name: name
+            type: string
+            required: true
+          - name: email
+            type: string
+            required: true
+          - name: role
+            type: string
+            required: false
+        example:
+          id: 1
+          name: "John Doe"
+          email: "john@example.com"
+          role: "user"
+
+  - path: /users
+    method: POST
+    module: users
+    summary: Create a new user
+    parameters: []
+    request:
+      content_type: application/json
+      fields:
+        - name: name
+          type: string
+          required: true
+          description: Full name
+        - name: email
+          type: string
+          required: true
+          description: Email address
+      example:
+        name: "Jane Smith"
+        email: "jane@example.com"
+    responses:
+      - status_code: 201
+        content_type: application/json
+        description: Created user
+        fields:
+          - name: id
+            type: integer
+            required: true
+        example:
+          id: 2
+
+  - path: /auth/login
+    method: POST
+    module: auth
+    summary: User login
+    description: Authenticate user and return token
+    request:
+      content_type: application/json
+      fields:
+        - name: username
+          type: string
+          required: true
+        - name: password
+          type: string
+          required: true
+      example:
+        username: "john"
+        password: "secret123"
+    responses:
+      - status_code: 200
+        content_type: application/json
+        description: Login successful
+        fields:
+          - name: token
+            type: string
+            required: true
+          - name: expires_in
+            type: integer
+            required: true
+        example:
+          token: "eyJhbGciOiJ..."
+          expires_in: 3600

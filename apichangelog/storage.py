@@ -1,0 +1,398 @@
+"""
+Storage and persistence module for API Changelog Tool.
+Handles loading/saving API specs, changelog entries, and notes.
+"""
+
+import json
+import os
+from pathlib import Path
+from typing import Any, Optional
+from datetime import date, datetime
+
+import yaml
+
+from .models import (
+    ApiSpec, EndpointDef, FieldDef, ParameterDef, RequestDef,
+    ResponseDef, Change, ChangeType, ImpactLevel, ChangeScope,
+    FieldChange, ChangelogEntry, ReleaseInfo
+)
+
+
+DEFAULT_CHANGELOG_DIR = ".apichangelog"
+DEFAULT_SPECS_DIR = "specs"
+DEFAULT_CHANGELOG_FILE = "changelog.json"
+
+
+class Storage:
+    """Manages file-based storage for API specs and changelog data."""
+
+    def __init__(self, base_dir: Optional[str] = None):
+        self.base_dir = Path(base_dir or os.getcwd())
+        self.changelog_dir = self.base_dir / DEFAULT_CHANGELOG_DIR
+        self.specs_dir = self.changelog_dir / DEFAULT_SPECS_DIR
+        self.changelog_file = self.changelog_dir / DEFAULT_CHANGELOG_FILE
+        self._ensure_dirs()
+
+    def _ensure_dirs(self):
+        self.changelog_dir.mkdir(parents=True, exist_ok=True)
+        self.specs_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---------- API Spec Loading ----------
+
+    def load_spec(self, file_path: str) -> ApiSpec:
+        """Load an API spec from YAML or JSON file."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Spec file not found: {file_path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            if path.suffix in (".yaml", ".yml"):
+                data = yaml.safe_load(f)
+            elif path.suffix == ".json":
+                data = json.load(f)
+            else:
+                raise ValueError(f"Unsupported file format: {path.suffix}")
+
+        return self._parse_spec(data, path.stem)
+
+    def _parse_spec(self, data: dict, fallback_name: str) -> ApiSpec:
+        """Parse a raw dict into an ApiSpec object.
+
+        Supports both native format and OpenAPI 3.0+ format detection.
+        """
+        if "openapi" in data:
+            return self._parse_openapi(data)
+        return self._parse_native(data, fallback_name)
+
+    def _parse_native(self, data: dict, fallback_name: str) -> ApiSpec:
+        """Parse the native apichangelog spec format."""
+        spec = ApiSpec(
+            name=data.get("name", fallback_name),
+            version=data.get("version", "0.0.0"),
+            base_url=data.get("base_url", ""),
+            description=data.get("description", ""),
+        )
+        for ep_data in data.get("endpoints", []):
+            spec.endpoints.append(self._parse_endpoint(ep_data))
+        return spec
+
+    def _parse_openapi(self, data: dict) -> ApiSpec:
+        """Parse OpenAPI 3.0+ spec format."""
+        info = data.get("info", {})
+        spec = ApiSpec(
+            name=info.get("title", "API"),
+            version=info.get("version", "0.0.0"),
+            base_url=data.get("servers", [{}])[0].get("url", ""),
+            description=info.get("description", ""),
+        )
+        paths = data.get("paths", {})
+        components = data.get("components", {})
+        schemas = components.get("schemas", {})
+
+        for path, methods in paths.items():
+            for method, op_data in methods.items():
+                if method.upper() not in ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"):
+                    continue
+                ep = self._parse_openapi_operation(path, method, op_data, schemas)
+                spec.endpoints.append(ep)
+        return spec
+
+    def _parse_openapi_operation(self, path: str, method: str,
+                                  op_data: dict, schemas: dict) -> EndpointDef:
+        """Parse a single OpenAPI operation into an EndpointDef."""
+        tags = op_data.get("tags", [])
+        ep = EndpointDef(
+            path=path,
+            method=method.upper(),
+            module=tags[0] if tags else "default",
+            summary=op_data.get("summary", ""),
+            description=op_data.get("description", ""),
+            deprecated=op_data.get("deprecated", False),
+            tags=tags,
+        )
+
+        for param in op_data.get("parameters", []):
+            schema_ref = param.get("schema", {})
+            param_type = self._resolve_schema_type(schema_ref, schemas)
+            ep.parameters.append(ParameterDef(
+                name=param.get("name", ""),
+                location=param.get("in", "query"),
+                type=param_type,
+                required=param.get("required", False),
+                description=param.get("description", ""),
+                example=param.get("example"),
+            ))
+
+        request_body = op_data.get("requestBody")
+        if request_body:
+            content = request_body.get("content", {})
+            for ct, ct_data in content.items():
+                req_schema = ct_data.get("schema", {})
+                fields = self._parse_schema_fields(req_schema, schemas)
+                ep.request = RequestDef(
+                    content_type=ct,
+                    fields=fields,
+                    example=ct_data.get("example"),
+                )
+                break
+
+        for status_code, resp_data in op_data.get("responses", {}).items():
+            content = resp_data.get("content", {})
+            for ct, ct_data in content.items():
+                resp_schema = ct_data.get("schema", {})
+                fields = self._parse_schema_fields(resp_schema, schemas)
+                ep.responses.append(ResponseDef(
+                    status_code=int(status_code) if status_code.isdigit() else 200,
+                    content_type=ct,
+                    fields=fields,
+                    example=ct_data.get("example"),
+                    description=resp_data.get("description", ""),
+                ))
+                if not content:
+                    ep.responses.append(ResponseDef(
+                        status_code=int(status_code) if status_code.isdigit() else 200,
+                        description=resp_data.get("description", ""),
+                    ))
+
+        return ep
+
+    def _resolve_schema_type(self, schema: dict, schemas: dict) -> str:
+        if "$ref" in schema:
+            ref_name = schema["$ref"].split("/")[-1]
+            ref_schema = schemas.get(ref_name, {})
+            return ref_schema.get("type", "object")
+        return schema.get("type", "object")
+
+    def _parse_schema_fields(self, schema: dict, schemas: dict) -> list[FieldDef]:
+        """Parse object properties from a JSON schema into FieldDef list."""
+        if "$ref" in schema:
+            ref_name = schema["$ref"].split("/")[-1]
+            schema = schemas.get(ref_name, {})
+
+        fields: list[FieldDef] = []
+        properties = schema.get("properties", {})
+        required = set(schema.get("required", []))
+
+        if schema.get("type") == "array":
+            items = schema.get("items", {})
+            return self._parse_schema_fields(items, schemas)
+
+        for name, prop in properties.items():
+            field_type = self._resolve_schema_type(prop, schemas)
+            if field_type == "object" and "properties" in prop:
+                nested = self._parse_schema_fields(prop, schemas)
+                fields.extend(
+                    FieldDef(name=f"{name}.{nf.name}", type=nf.type,
+                             required=name in required and nf.required,
+                             description=nf.description, example=nf.example)
+                    for nf in nested
+                )
+            else:
+                fields.append(FieldDef(
+                    name=name,
+                    type=field_type,
+                    required=name in required,
+                    description=prop.get("description", ""),
+                    example=prop.get("example"),
+                    enum=prop.get("enum"),
+                ))
+        return fields
+
+    def _parse_endpoint(self, data: dict) -> EndpointDef:
+        """Parse a native-format endpoint definition."""
+        ep = EndpointDef(
+            path=data.get("path", ""),
+            method=data.get("method", "GET").upper(),
+            module=data.get("module", "default"),
+            summary=data.get("summary", ""),
+            description=data.get("description", ""),
+            deprecated=data.get("deprecated", False),
+            tags=data.get("tags", []),
+        )
+        for p in data.get("parameters", []):
+            ep.parameters.append(ParameterDef(**p))
+        if "request" in data:
+            req_data = data["request"]
+            ep.request = RequestDef(
+                content_type=req_data.get("content_type", "application/json"),
+                fields=[FieldDef(**f) for f in req_data.get("fields", [])],
+                example=req_data.get("example"),
+            )
+        for r in data.get("responses", []):
+            ep.responses.append(ResponseDef(
+                status_code=r.get("status_code", 200),
+                content_type=r.get("content_type", "application/json"),
+                fields=[FieldDef(**f) for f in r.get("fields", [])],
+                example=r.get("example"),
+                description=r.get("description", ""),
+            ))
+        return ep
+
+    # ---------- Stored Spec Management ----------
+
+    def save_stored_spec(self, spec: ApiSpec, version: Optional[str] = None) -> Path:
+        """Save an API spec to the specs directory."""
+        ver = version or spec.version
+        path = self.specs_dir / f"{spec.name}_{ver}.json"
+        data = self._spec_to_dict(spec)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return path
+
+    def load_stored_spec(self, name: str, version: str) -> Optional[ApiSpec]:
+        """Load a previously stored spec by name and version."""
+        path = self.specs_dir / f"{name}_{version}.json"
+        if not path.exists():
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return self._parse_native(data, name)
+
+    def list_stored_specs(self) -> list[tuple[str, str]]:
+        """List all stored specs as (name, version) tuples."""
+        specs: list[tuple[str, str]] = []
+        if not self.specs_dir.exists():
+            return specs
+        for f in self.specs_dir.glob("*_*.json"):
+            stem = f.stem
+            parts = stem.rsplit("_", 1)
+            if len(parts) == 2:
+                specs.append((parts[0], parts[1]))
+        return sorted(specs)
+
+    def _spec_to_dict(self, spec: ApiSpec) -> dict:
+        """Convert ApiSpec to a serializable dict."""
+        return {
+            "name": spec.name,
+            "version": spec.version,
+            "base_url": spec.base_url,
+            "description": spec.description,
+            "endpoints": [
+                {
+                    "path": ep.path,
+                    "method": ep.method,
+                    "module": ep.module,
+                    "summary": ep.summary,
+                    "description": ep.description,
+                    "deprecated": ep.deprecated,
+                    "tags": ep.tags,
+                    "parameters": [p.__dict__ for p in ep.parameters],
+                    "request": {
+                        "content_type": ep.request.content_type,
+                        "fields": [f.__dict__ for f in ep.request.fields],
+                        "example": ep.request.example,
+                    } if ep.request else None,
+                    "responses": [
+                        {
+                            "status_code": r.status_code,
+                            "content_type": r.content_type,
+                            "fields": [f.__dict__ for f in r.fields],
+                            "example": r.example,
+                            "description": r.description,
+                        } for r in ep.responses
+                    ],
+                } for ep in spec.endpoints
+            ],
+        }
+
+    # ---------- Changelog Management ----------
+
+    def load_changelog(self) -> list[ChangelogEntry]:
+        """Load the full changelog history."""
+        if not self.changelog_file.exists():
+            return []
+        with open(self.changelog_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return [self._entry_from_dict(e) for e in data]
+
+    def save_changelog(self, entries: list[ChangelogEntry]) -> None:
+        """Save the full changelog history."""
+        data = [self._entry_to_dict(e) for e in entries]
+        with open(self.changelog_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def get_entry(self, version: str) -> Optional[ChangelogEntry]:
+        """Get a changelog entry for a specific version."""
+        for e in self.load_changelog():
+            if e.version == version:
+                return e
+        return None
+
+    def upsert_entry(self, entry: ChangelogEntry) -> None:
+        """Add or update a changelog entry."""
+        entries = self.load_changelog()
+        found = False
+        for i, e in enumerate(entries):
+            if e.version == entry.version:
+                entries[i] = entry
+                found = True
+                break
+        if not found:
+            entries.append(entry)
+        entries.sort(key=lambda e: e.version, reverse=True)
+        self.save_changelog(entries)
+
+    def _entry_from_dict(self, data: dict) -> ChangelogEntry:
+        changes = []
+        for c in data.get("changes", []):
+            field_changes = [
+                FieldChange(
+                    field_name=fc["field_name"],
+                    change_type=ChangeType(fc["change_type"]),
+                    old_value=fc.get("old_value"),
+                    new_value=fc.get("new_value"),
+                    property_changed=fc.get("property_changed"),
+                ) for fc in c.get("field_changes", [])
+            ]
+            changes.append(Change(
+                change_type=ChangeType(c["change_type"]),
+                scope=ChangeScope(c["scope"]),
+                endpoint_key=c.get("endpoint_key"),
+                module=c.get("module", "default"),
+                description=c.get("description", ""),
+                field_changes=field_changes,
+                impact=ImpactLevel(c.get("impact", "none")),
+                breaking=c.get("breaking", False),
+                confirmed=c.get("confirmed", False),
+                notes=c.get("notes", []),
+                migration_guide=c.get("migration_guide", ""),
+            ))
+        release_date = data.get("release_date")
+        return ChangelogEntry(
+            version=data["version"],
+            release_date=datetime.fromisoformat(release_date).date() if release_date else None,
+            changes=changes,
+            notes=data.get("notes", []),
+            released=data.get("released", False),
+        )
+
+    def _entry_to_dict(self, entry: ChangelogEntry) -> dict:
+        return {
+            "version": entry.version,
+            "release_date": entry.release_date.isoformat() if entry.release_date else None,
+            "changes": [
+                {
+                    "change_type": c.change_type.value,
+                    "scope": c.scope.value,
+                    "endpoint_key": c.endpoint_key,
+                    "module": c.module,
+                    "description": c.description,
+                    "field_changes": [
+                        {
+                            "field_name": fc.field_name,
+                            "change_type": fc.change_type.value,
+                            "old_value": fc.old_value,
+                            "new_value": fc.new_value,
+                            "property_changed": fc.property_changed,
+                        } for fc in c.field_changes
+                    ],
+                    "impact": c.impact.value,
+                    "breaking": c.breaking,
+                    "confirmed": c.confirmed,
+                    "notes": c.notes,
+                    "migration_guide": c.migration_guide,
+                } for c in entry.changes
+            ],
+            "notes": entry.notes,
+            "released": entry.released,
+        }
