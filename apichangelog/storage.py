@@ -56,16 +56,11 @@ class Storage:
         return self._parse_spec(data, path.stem)
 
     def _parse_spec(self, data: dict, fallback_name: str) -> ApiSpec:
-        """Parse a raw dict into an ApiSpec object.
-
-        Supports both native format and OpenAPI 3.0+ format detection.
-        """
         if "openapi" in data:
             return self._parse_openapi(data)
         return self._parse_native(data, fallback_name)
 
     def _parse_native(self, data: dict, fallback_name: str) -> ApiSpec:
-        """Parse the native apichangelog spec format."""
         spec = ApiSpec(
             name=data.get("name", fallback_name),
             version=data.get("version", "0.0.0"),
@@ -77,7 +72,6 @@ class Storage:
         return spec
 
     def _parse_openapi(self, data: dict) -> ApiSpec:
-        """Parse OpenAPI 3.0+ spec format."""
         info = data.get("info", {})
         spec = ApiSpec(
             name=info.get("title", "API"),
@@ -99,7 +93,6 @@ class Storage:
 
     def _parse_openapi_operation(self, path: str, method: str,
                                   op_data: dict, schemas: dict) -> EndpointDef:
-        """Parse a single OpenAPI operation into an EndpointDef."""
         tags = op_data.get("tags", [])
         ep = EndpointDef(
             path=path,
@@ -138,21 +131,22 @@ class Storage:
 
         for status_code, resp_data in op_data.get("responses", {}).items():
             content = resp_data.get("content", {})
-            for ct, ct_data in content.items():
-                resp_schema = ct_data.get("schema", {})
-                fields = self._parse_schema_fields(resp_schema, schemas)
-                ep.responses.append(ResponseDef(
-                    status_code=int(status_code) if status_code.isdigit() else 200,
-                    content_type=ct,
-                    fields=fields,
-                    example=ct_data.get("example"),
-                    description=resp_data.get("description", ""),
-                ))
-                if not content:
+            if content:
+                for ct, ct_data in content.items():
+                    resp_schema = ct_data.get("schema", {})
+                    fields = self._parse_schema_fields(resp_schema, schemas)
                     ep.responses.append(ResponseDef(
                         status_code=int(status_code) if status_code.isdigit() else 200,
+                        content_type=ct,
+                        fields=fields,
+                        example=ct_data.get("example"),
                         description=resp_data.get("description", ""),
                     ))
+            else:
+                ep.responses.append(ResponseDef(
+                    status_code=int(status_code) if status_code.isdigit() else 200,
+                    description=resp_data.get("description", ""),
+                ))
 
         return ep
 
@@ -164,7 +158,6 @@ class Storage:
         return schema.get("type", "object")
 
     def _parse_schema_fields(self, schema: dict, schemas: dict) -> list[FieldDef]:
-        """Parse object properties from a JSON schema into FieldDef list."""
         if "$ref" in schema:
             ref_name = schema["$ref"].split("/")[-1]
             schema = schemas.get(ref_name, {})
@@ -199,7 +192,6 @@ class Storage:
         return fields
 
     def _parse_endpoint(self, data: dict) -> EndpointDef:
-        """Parse a native-format endpoint definition."""
         ep = EndpointDef(
             path=data.get("path", ""),
             method=data.get("method", "GET").upper(),
@@ -210,28 +202,46 @@ class Storage:
             tags=data.get("tags", []),
         )
         for p in data.get("parameters", []):
-            ep.parameters.append(ParameterDef(**p))
-        if "request" in data:
-            req_data = data["request"]
+            ep.parameters.append(ParameterDef(
+                name=p.get("name", ""),
+                location=p.get("location", "query"),
+                type=p.get("type", "string"),
+                required=p.get("required", False),
+                description=p.get("description", ""),
+                default=p.get("default"),
+                example=p.get("example"),
+            ))
+        req_data = data.get("request")
+        if req_data is not None:
             ep.request = RequestDef(
                 content_type=req_data.get("content_type", "application/json"),
-                fields=[FieldDef(**f) for f in req_data.get("fields", [])],
+                fields=[self._parse_field(f) for f in req_data.get("fields", [])],
                 example=req_data.get("example"),
             )
         for r in data.get("responses", []):
             ep.responses.append(ResponseDef(
                 status_code=r.get("status_code", 200),
                 content_type=r.get("content_type", "application/json"),
-                fields=[FieldDef(**f) for f in r.get("fields", [])],
+                fields=[self._parse_field(f) for f in r.get("fields", [])],
                 example=r.get("example"),
                 description=r.get("description", ""),
             ))
         return ep
 
+    def _parse_field(self, data: dict) -> FieldDef:
+        return FieldDef(
+            name=data.get("name", ""),
+            type=data.get("type", "string"),
+            required=data.get("required", False),
+            description=data.get("description", ""),
+            default=data.get("default"),
+            example=data.get("example"),
+            enum=data.get("enum"),
+        )
+
     # ---------- Stored Spec Management ----------
 
     def save_stored_spec(self, spec: ApiSpec, version: Optional[str] = None) -> Path:
-        """Save an API spec to the specs directory."""
         ver = version or spec.version
         path = self.specs_dir / f"{spec.name}_{ver}.json"
         data = self._spec_to_dict(spec)
@@ -240,7 +250,6 @@ class Storage:
         return path
 
     def load_stored_spec(self, name: str, version: str) -> Optional[ApiSpec]:
-        """Load a previously stored spec by name and version."""
         path = self.specs_dir / f"{name}_{version}.json"
         if not path.exists():
             return None
@@ -249,56 +258,68 @@ class Storage:
         return self._parse_native(data, name)
 
     def list_stored_specs(self) -> list[tuple[str, str]]:
-        """List all stored specs as (name, version) tuples."""
         specs: list[tuple[str, str]] = []
         if not self.specs_dir.exists():
             return specs
-        for f in self.specs_dir.glob("*_*.json"):
+        for f in self.specs_dir.glob("*.json"):
             stem = f.stem
-            parts = stem.rsplit("_", 1)
-            if len(parts) == 2:
-                specs.append((parts[0], parts[1]))
+            with open(f, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            name = data.get("name", "")
+            version = data.get("version", "")
+            if name and version:
+                specs.append((name, version))
         return sorted(specs)
 
     def _spec_to_dict(self, spec: ApiSpec) -> dict:
-        """Convert ApiSpec to a serializable dict."""
+        endpoints = []
+        for ep in spec.endpoints:
+            ep_dict: dict[str, Any] = {
+                "path": ep.path,
+                "method": ep.method,
+                "module": ep.module,
+                "summary": ep.summary,
+                "description": ep.description,
+                "deprecated": ep.deprecated,
+                "tags": ep.tags,
+                "parameters": [
+                    {k: v for k, v in p.__dict__.items() if v is not None}
+                    for p in ep.parameters
+                ],
+                "responses": [
+                    {
+                        "status_code": r.status_code,
+                        "content_type": r.content_type,
+                        "fields": [
+                            {k: v for k, v in f.__dict__.items() if v is not None}
+                            for f in r.fields
+                        ],
+                        **({"example": r.example} if r.example is not None else {}),
+                        "description": r.description,
+                    } for r in ep.responses
+                ],
+            }
+            if ep.request is not None:
+                ep_dict["request"] = {
+                    "content_type": ep.request.content_type,
+                    "fields": [
+                        {k: v for k, v in f.__dict__.items() if v is not None}
+                        for f in ep.request.fields
+                    ],
+                    **({"example": ep.request.example} if ep.request.example is not None else {}),
+                }
+            endpoints.append(ep_dict)
         return {
             "name": spec.name,
             "version": spec.version,
             "base_url": spec.base_url,
             "description": spec.description,
-            "endpoints": [
-                {
-                    "path": ep.path,
-                    "method": ep.method,
-                    "module": ep.module,
-                    "summary": ep.summary,
-                    "description": ep.description,
-                    "deprecated": ep.deprecated,
-                    "tags": ep.tags,
-                    "parameters": [p.__dict__ for p in ep.parameters],
-                    "request": {
-                        "content_type": ep.request.content_type,
-                        "fields": [f.__dict__ for f in ep.request.fields],
-                        "example": ep.request.example,
-                    } if ep.request else None,
-                    "responses": [
-                        {
-                            "status_code": r.status_code,
-                            "content_type": r.content_type,
-                            "fields": [f.__dict__ for f in r.fields],
-                            "example": r.example,
-                            "description": r.description,
-                        } for r in ep.responses
-                    ],
-                } for ep in spec.endpoints
-            ],
+            "endpoints": endpoints,
         }
 
     # ---------- Changelog Management ----------
 
     def load_changelog(self) -> list[ChangelogEntry]:
-        """Load the full changelog history."""
         if not self.changelog_file.exists():
             return []
         with open(self.changelog_file, "r", encoding="utf-8") as f:
@@ -306,24 +327,27 @@ class Storage:
         return [self._entry_from_dict(e) for e in data]
 
     def save_changelog(self, entries: list[ChangelogEntry]) -> None:
-        """Save the full changelog history."""
         data = [self._entry_to_dict(e) for e in entries]
         with open(self.changelog_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def get_entry(self, version: str) -> Optional[ChangelogEntry]:
-        """Get a changelog entry for a specific version."""
         for e in self.load_changelog():
             if e.version == version:
                 return e
         return None
 
+    def get_entry_by_spec(self, spec_name: str, version: str) -> Optional[ChangelogEntry]:
+        for e in self.load_changelog():
+            if e.version == version and getattr(e, "spec_name", "") == spec_name:
+                return e
+        return None
+
     def upsert_entry(self, entry: ChangelogEntry) -> None:
-        """Add or update a changelog entry."""
         entries = self.load_changelog()
         found = False
         for i, e in enumerate(entries):
-            if e.version == entry.version:
+            if e.version == entry.version and getattr(e, "spec_name", "") == getattr(entry, "spec_name", ""):
                 entries[i] = entry
                 found = True
                 break
@@ -358,16 +382,18 @@ class Storage:
                 migration_guide=c.get("migration_guide", ""),
             ))
         release_date = data.get("release_date")
-        return ChangelogEntry(
+        entry = ChangelogEntry(
             version=data["version"],
             release_date=datetime.fromisoformat(release_date).date() if release_date else None,
             changes=changes,
             notes=data.get("notes", []),
             released=data.get("released", False),
         )
+        entry.spec_name = data.get("spec_name", "")
+        return entry
 
     def _entry_to_dict(self, entry: ChangelogEntry) -> dict:
-        return {
+        d: dict[str, Any] = {
             "version": entry.version,
             "release_date": entry.release_date.isoformat() if entry.release_date else None,
             "changes": [
@@ -396,3 +422,7 @@ class Storage:
             "notes": entry.notes,
             "released": entry.released,
         }
+        spec_name = getattr(entry, "spec_name", "")
+        if spec_name:
+            d["spec_name"] = spec_name
+        return d

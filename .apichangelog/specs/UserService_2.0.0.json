@@ -19,8 +19,7 @@
           "type": "integer",
           "required": false,
           "description": "Page number",
-          "default": 1,
-          "example": null
+          "default": 1
         },
         {
           "name": "limit",
@@ -28,20 +27,16 @@
           "type": "integer",
           "required": false,
           "description": "Items per page",
-          "default": 20,
-          "example": null
+          "default": 20
         },
         {
           "name": "status",
           "location": "query",
           "type": "string",
           "required": true,
-          "description": "Filter by user status (active, inactive)",
-          "default": null,
-          "example": null
+          "description": "Filter by user status (active, inactive)"
         }
       ],
-      "request": null,
       "responses": [
         {
           "status_code": 200,
@@ -51,28 +46,19 @@
               "name": "items",
               "type": "array",
               "required": true,
-              "description": "List of users",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": "List of users"
             },
             {
               "name": "total_count",
               "type": "integer",
               "required": true,
-              "description": "Total count",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": "Total count"
             },
             {
               "name": "page_info",
               "type": "object",
               "required": false,
-              "description": "Pagination metadata",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": "Pagination metadata"
             }
           ],
           "example": {
@@ -104,12 +90,9 @@
           "location": "path",
           "type": "string",
           "required": true,
-          "description": "User UUID",
-          "default": null,
-          "example": null
+          "description": "User UUID"
         }
       ],
-      "request": null,
       "responses": [
         {
           "status_code": 200,
@@ -119,46 +102,31 @@
               "name": "id",
               "type": "string",
               "required": true,
-              "description": "User UUID",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": "User UUID"
             },
             {
               "name": "name",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "email",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "status",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "created_at",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
           "example": {
@@ -181,43 +149,6 @@
       "deprecated": false,
       "tags": [],
       "parameters": [],
-      "request": {
-        "content_type": "application/json",
-        "fields": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": true,
-            "description": "Full name",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "email",
-            "type": "string",
-            "required": true,
-            "description": "Email address",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "status",
-            "type": "string",
-            "required": false,
-            "description": "Initial status",
-            "default": "active",
-            "example": null,
-            "enum": null
-          }
-        ],
-        "example": {
-          "name": "Jane Smith",
-          "email": "jane@example.com",
-          "status": "active"
-        }
-      },
       "responses": [
         {
           "status_code": 201,
@@ -227,10 +158,7 @@
               "name": "id",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
           "example": {
@@ -238,7 +166,36 @@
           },
           "description": "Created user"
         }
-      ]
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "description": "Full name"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "description": "Email address"
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "required": false,
+            "description": "Initial status",
+            "default": "active"
+          }
+        ],
+        "example": {
+          "name": "Jane Smith",
+          "email": "jane@example.com",
+          "status": "active"
+        }
+      }
     },
     {
       "path": "/users/{id}",
@@ -254,44 +211,9 @@
           "location": "path",
           "type": "string",
           "required": true,
-          "description": "User UUID",
-          "default": null,
-          "example": null
+          "description": "User UUID"
         }
       ],
-      "request": {
-        "content_type": "application/json",
-        "fields": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": false,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "email",
-            "type": "string",
-            "required": false,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "status",
-            "type": "string",
-            "required": false,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          }
-        ],
-        "example": null
-      },
       "responses": [
         {
           "status_code": 200,
@@ -301,16 +223,35 @@
               "name": "id",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
-          "example": null,
           "description": "Updated user"
         }
-      ]
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": false,
+            "description": ""
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "required": false,
+            "description": ""
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "required": false,
+            "description": ""
+          }
+        ]
+      }
     },
     {
       "path": "/auth/login",
@@ -321,33 +262,6 @@
       "deprecated": true,
       "tags": [],
       "parameters": [],
-      "request": {
-        "content_type": "application/json",
-        "fields": [
-          {
-            "name": "username",
-            "type": "string",
-            "required": true,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "password",
-            "type": "string",
-            "required": true,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          }
-        ],
-        "example": {
-          "username": "john",
-          "password": "secret123"
-        }
-      },
       "responses": [
         {
           "status_code": 200,
@@ -357,19 +271,13 @@
               "name": "token",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "expires_in",
               "type": "integer",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
           "example": {
@@ -378,7 +286,28 @@
           },
           "description": "Login successful"
         }
-      ]
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "username",
+            "type": "string",
+            "required": true,
+            "description": ""
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "required": true,
+            "description": ""
+          }
+        ],
+        "example": {
+          "username": "john",
+          "password": "secret123"
+        }
+      }
     },
     {
       "path": "/auth/token",
@@ -389,48 +318,6 @@
       "deprecated": false,
       "tags": [],
       "parameters": [],
-      "request": {
-        "content_type": "application/json",
-        "fields": [
-          {
-            "name": "grant_type",
-            "type": "string",
-            "required": true,
-            "description": "password or refresh_token",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "username",
-            "type": "string",
-            "required": false,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "password",
-            "type": "string",
-            "required": false,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "refresh_token",
-            "type": "string",
-            "required": false,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          }
-        ],
-        "example": null
-      },
       "responses": [
         {
           "status_code": 200,
@@ -440,43 +327,59 @@
               "name": "access_token",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "refresh_token",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "expires_in",
               "type": "integer",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "token_type",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
-          "example": null,
           "description": "Token response"
         }
-      ]
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "grant_type",
+            "type": "string",
+            "required": true,
+            "description": "password or refresh_token"
+          },
+          {
+            "name": "username",
+            "type": "string",
+            "required": false,
+            "description": ""
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "required": false,
+            "description": ""
+          },
+          {
+            "name": "refresh_token",
+            "type": "string",
+            "required": false,
+            "description": ""
+          }
+        ]
+      }
     }
   ]
 }

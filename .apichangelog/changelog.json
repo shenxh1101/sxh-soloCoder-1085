@@ -27,7 +27,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
         "migration_guide": ""
       },
@@ -49,10 +49,8 @@
         "impact": "high",
         "breaking": true,
         "confirmed": true,
-        "notes": [
-          "Required query parameter for filtering by user status"
-        ],
-        "migration_guide": "Add status=active to your GET /users requests to maintain existing behavior"
+        "notes": [],
+        "migration_guide": "Add status=active query parameter to all GET /users requests"
       },
       {
         "change_type": "added",
@@ -85,9 +83,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "Map new response fields: items replaces data, total_count replaces total"
       },
       {
         "change_type": "removed",
@@ -113,9 +111,9 @@
         ],
         "impact": "breaking",
         "breaking": true,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "Rename data to items and total to total_count in response parsing"
       },
       {
         "change_type": "modified",
@@ -134,7 +132,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
         "migration_guide": ""
       },
@@ -155,9 +153,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "Change user ID parameter from integer to UUID string"
       },
       {
         "change_type": "added",
@@ -183,9 +181,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "Parse new status and created_at fields from response"
       },
       {
         "change_type": "removed",
@@ -204,9 +202,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "Remove role field parsing, use status instead"
       },
       {
         "change_type": "modified",
@@ -232,9 +230,9 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "Update id field type from integer to string (UUID)"
       },
       {
         "change_type": "added",
@@ -245,7 +243,7 @@
         "field_changes": [],
         "impact": "low",
         "breaking": false,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
         "migration_guide": ""
       },
@@ -258,7 +256,7 @@
         "field_changes": [],
         "impact": "medium",
         "breaking": false,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
         "migration_guide": ""
       },
@@ -279,7 +277,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
         "migration_guide": ""
       },
@@ -292,7 +290,7 @@
         "field_changes": [],
         "impact": "low",
         "breaking": false,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
         "migration_guide": ""
       },
@@ -313,7 +311,7 @@
         ],
         "impact": "low",
         "breaking": false,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
         "migration_guide": ""
       },
@@ -334,12 +332,13 @@
         ],
         "impact": "high",
         "breaking": true,
-        "confirmed": false,
+        "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "Update id field parsing from integer to string UUID"
       }
     ],
     "notes": [],
-    "released": true
+    "released": true,
+    "spec_name": "UserService"
   }
 ]

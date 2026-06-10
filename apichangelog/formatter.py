@@ -38,16 +38,11 @@ class ConsoleFormatter:
     """Formats output for terminal display using Rich."""
 
     def __init__(self):
-        import sys
-        import io
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
         self.console = Console(legacy_windows=False, highlight=False)
 
     # ---------- Scan output ----------
 
     def print_spec_summary(self, spec: ApiSpec) -> None:
-        """Print a summary of an API spec."""
         header = Panel.fit(
             Text.from_markup(
                 f"[bold cyan]{spec.name}[/bold cyan]\n"
@@ -78,14 +73,13 @@ class ConsoleFormatter:
     # ---------- Diff output ----------
 
     def print_diff(self, diff: VersionDiff, new_spec: Optional[ApiSpec] = None) -> None:
-        """Print a formatted diff summary."""
         total = len(diff.changes)
         breaking = len(diff.breaking_changes())
         pending = len(diff.pending_changes())
 
         header = Panel.fit(
             Text.from_markup(
-                f"[bold cyan]{diff.old_version}[/bold cyan] → "
+                f"[bold cyan]{diff.old_version}[/bold cyan] -> "
                 f"[bold green]{diff.new_version}[/bold green]\n"
                 f"[dim]Total changes:[/dim] [bold]{total}[/bold]\n"
                 f"[dim]Breaking changes:[/dim] [bold red]{breaking}[/bold red]\n"
@@ -113,7 +107,7 @@ class ConsoleFormatter:
                 self.console.print()
                 self.console.print(
                     Panel.fit(
-                        "\n".join(f"  • [red]{ep.key}[/red]" for ep in missing),
+                        "\n".join(f"  - [red]{ep.key}[/red]" for ep in missing),
                         title=f"[!] Missing examples ({len(missing)} endpoints)",
                         border_style="yellow",
                     )
@@ -125,7 +119,7 @@ class ConsoleFormatter:
             self.console.print(
                 Panel.fit(
                     "\n".join(
-                        f"  • [yellow]{c.description}[/yellow]"
+                        f"  - [yellow]{c.description}[/yellow]"
                         + (" [bold red](breaking)[/bold red]" if c.breaking else "")
                         for c in pending_list
                     ),
@@ -154,7 +148,7 @@ class ConsoleFormatter:
                 if fc.property_changed:
                     detail += f" [dim]({fc.property_changed})[/dim]"
                 if fc.old_value is not None and fc.new_value is not None:
-                    detail += f": [red]{fc.old_value}[/red] → [green]{fc.new_value}[/green]"
+                    detail += f": [red]{fc.old_value}[/red] -> [green]{fc.new_value}[/green]"
                 elif fc.new_value is not None:
                     detail += f": [green]{fc.new_value}[/green]"
                 elif fc.old_value is not None:
@@ -165,21 +159,22 @@ class ConsoleFormatter:
             for note in change.notes:
                 branch.add(f"[cyan][NOTE] {note}[/cyan]")
         if change.migration_guide:
-            branch.add(f"[blue]→ Migration: {change.migration_guide}[/blue]")
+            branch.add(f"[blue]-> Migration: {change.migration_guide}[/blue]")
         if not change.confirmed:
             branch.add("[yellow][PENDING] Pending confirmation[/yellow]")
 
     # ---------- Release output ----------
 
-    def print_release_preview(self, entry: ChangelogEntry, release_info: ReleaseInfo) -> None:
-        """Print a release changelog preview."""
+    def print_release_preview(self, entry: ChangelogEntry, release_info: ReleaseInfo,
+                               filtered_changes: Optional[list[Change]] = None) -> None:
+        changes = filtered_changes if filtered_changes is not None else entry.changes
         date_str = release_info.release_date.isoformat()
         header = Panel.fit(
             Text.from_markup(
                 f"[bold cyan]{release_info.version}[/bold cyan]\n"
                 f"[dim]Release date:[/dim] [bold]{date_str}[/bold]\n"
                 f"[dim]Modules:[/dim] [bold]{', '.join(release_info.modules)}[/bold]\n"
-                f"[dim]Total changes:[/dim] [bold]{len(entry.changes)}[/bold]"
+                f"[dim]Total changes:[/dim] [bold]{len(changes)}[/bold]"
             ),
             title="Release Notes Preview",
             border_style="green",
@@ -193,34 +188,135 @@ class ConsoleFormatter:
             self.console.print(highlights)
             self.console.print()
 
-        breaking = [c for c in entry.changes if c.breaking]
+        breaking = [c for c in changes if c.breaking]
         if breaking:
             self.console.print("[bold red][!] BREAKING CHANGES[/bold red]")
             for c in breaking:
-                self.console.print(f"  • {c.description}")
+                self.console.print(f"  - {c.description}")
                 if c.migration_guide:
-                    self.console.print(f"    [blue]→ {c.migration_guide}[/blue]")
+                    self.console.print(f"    [blue]-> {c.migration_guide}[/blue]")
             self.console.print()
 
-        by_module = {}
-        for c in entry.changes:
+        by_module: dict[str, list[Change]] = {}
+        for c in changes:
             by_module.setdefault(c.module, []).append(c)
         for mod in sorted(by_module.keys()):
             self.console.print(f"[bold blue]### {mod}[/bold blue]")
             for change_type in (ChangeType.ADDED, ChangeType.MODIFIED,
                                 ChangeType.REMOVED, ChangeType.DEPRECATED):
-                changes = [c for c in by_module[mod] if c.change_type == change_type]
-                if not changes:
+                group = [c for c in by_module[mod] if c.change_type == change_type]
+                if not group:
                     continue
                 _, _, label = CHANGE_TYPE_LABELS[change_type]
                 self.console.print(f"  **{label}**")
-                for c in changes:
+                for c in group:
                     if c.breaking:
                         continue
                     self.console.print(f"    - {c.description}")
                     for note in c.notes:
                         self.console.print(f"      [dim]_{note}_[/dim]")
             self.console.print()
+
+    # ---------- Versions output ----------
+
+    def print_versions(self, specs: list[tuple[str, str]],
+                        entry_map: dict[str, ChangelogEntry]) -> None:
+        table = Table(title="Saved API Specs & Changelogs", show_lines=True)
+        table.add_column("Service", style="cyan bold")
+        table.add_column("Version", style="green")
+        table.add_column("Release Date", style="yellow")
+        table.add_column("Released", style="magenta")
+        table.add_column("Changes", justify="right")
+        table.add_column("Pending", justify="right", style="red")
+        table.add_column("Modules", style="blue")
+
+        if not specs:
+            self.console.print("[dim]No saved specs found. Run 'scan --save' first.[/dim]")
+            return
+
+        for name, version in specs:
+            entry = entry_map.get(version)
+            if entry:
+                rel_date = entry.release_date.isoformat() if entry.release_date else "-"
+                released = "[green]Yes[/green]" if entry.released else "[dim]No[/dim]"
+                n_changes = len(entry.changes)
+                n_pending = len([c for c in entry.changes if c.is_pending()])
+                modules = ", ".join(sorted({c.module for c in entry.changes})) or "-"
+            else:
+                rel_date = "-"
+                released = "-"
+                n_changes = 0
+                n_pending = 0
+                modules = "-"
+            table.add_row(name, version, rel_date, released,
+                          str(n_changes), str(n_pending), modules)
+
+        self.console.print(table)
+
+    # ---------- Review output ----------
+
+    def print_review_list(self, entry: ChangelogEntry,
+                           changes: list[Change]) -> None:
+        pending = [c for c in changes if c.is_pending()]
+        confirmed = [c for c in changes if not c.is_pending()]
+
+        header = Panel.fit(
+            Text.from_markup(
+                f"[bold]Version {entry.version}[/bold]\n"
+                f"[dim]Total:[/dim] {len(changes)}  "
+                f"[green]Confirmed:[/green] {len(confirmed)}  "
+                f"[red]Pending:[/red] {len(pending)}"
+            ),
+            title="Review Status",
+            border_style="yellow" if pending else "green",
+        )
+        self.console.print(header)
+
+        if pending:
+            self.console.print()
+            self.console.print("[bold red]Unconfirmed Changes[/bold red]")
+            for i, c in enumerate(changes):
+                if not c.is_pending():
+                    continue
+                tag = " [bold red][BREAKING][/bold red]" if c.breaking else ""
+                impact_color = IMPACT_COLORS[c.impact]
+                status_parts = [
+                    f"  [{i}] ",
+                    f"[{impact_color}]{c.impact.value.upper()}[/{impact_color}] ",
+                    c.description,
+                    tag,
+                ]
+                self.console.print("".join(status_parts))
+                if c.breaking and not c.migration_guide:
+                    self.console.print("      [dim]-> needs migration guide[/dim]")
+
+        if confirmed:
+            self.console.print()
+            self.console.print("[bold green]Confirmed Changes[/bold green]")
+            for i, c in enumerate(changes):
+                if c.is_pending():
+                    continue
+                self.console.print(f"  [{i}] [dim]{c.description}[/dim]")
+
+        spec_name = getattr(entry, "spec_name", "")
+        if spec_name:
+            spec = None
+            try:
+                from .storage import Storage
+                import os
+                s = Storage()
+                spec = s.load_stored_spec(spec_name, entry.version)
+            except Exception:
+                pass
+            if spec:
+                no_examples = [ep for ep in spec.endpoints if not ep.has_examples()]
+                if no_examples:
+                    self.console.print()
+                    self.console.print(
+                        f"[bold yellow]Missing Examples ({len(no_examples)} endpoints)[/bold yellow]"
+                    )
+                    for ep in no_examples:
+                        self.console.print(f"  - [red]{ep.key}[/red]")
 
 
 class MarkdownFormatter:
@@ -229,9 +325,8 @@ class MarkdownFormatter:
     # ---------- Diff Markdown ----------
 
     def render_diff(self, diff: VersionDiff, new_spec: Optional[ApiSpec] = None) -> str:
-        """Render a VersionDiff as Markdown."""
         lines: list[str] = []
-        lines.append(f"# API Diff: {diff.old_version} → {diff.new_version}")
+        lines.append(f"# API Diff: {diff.old_version} -> {diff.new_version}")
         lines.append("")
 
         total = len(diff.changes)
@@ -246,7 +341,7 @@ class MarkdownFormatter:
         lines.append("")
 
         if breaking_changes_list:
-            lines.append("## ⚠ Breaking Changes")
+            lines.append("## BREAKING CHANGES")
             lines.append("")
             for c in breaking_changes_list:
                 lines.append(f"### {c.description}")
@@ -274,7 +369,7 @@ class MarkdownFormatter:
         if new_spec:
             missing = diff.missing_examples(new_spec)
             if missing:
-                lines.append("## ⚠ Missing Examples")
+                lines.append("## Missing Examples")
                 lines.append("")
                 for ep in missing:
                     lines.append(f"- `{ep.key}`")
@@ -282,7 +377,7 @@ class MarkdownFormatter:
 
         pending_list = diff.pending_changes()
         if pending_list:
-            lines.append("## ⏳ Pending Review")
+            lines.append("## Pending Review")
             lines.append("")
             for c in pending_list:
                 tag = " **[BREAKING]**" if c.breaking else ""
@@ -309,7 +404,7 @@ class MarkdownFormatter:
                     if fc.property_changed:
                         detail += f" ({fc.property_changed})"
                     if fc.old_value is not None and fc.new_value is not None:
-                        detail += f": `{fc.old_value}` → `{fc.new_value}`"
+                        detail += f": `{fc.old_value}` -> `{fc.new_value}`"
                     elif fc.new_value is not None:
                         detail += f": `{fc.new_value}`"
                     elif fc.old_value is not None:
@@ -324,8 +419,9 @@ class MarkdownFormatter:
 
     # ---------- Release Markdown ----------
 
-    def render_release(self, entry: ChangelogEntry, release_info: ReleaseInfo) -> str:
-        """Render a full release changelog as Markdown."""
+    def render_release(self, entry: ChangelogEntry, release_info: ReleaseInfo,
+                        filtered_changes: Optional[list[Change]] = None) -> str:
+        changes = filtered_changes if filtered_changes is not None else entry.changes
         lines: list[str] = []
         date_str = release_info.release_date.isoformat()
         lines.append(f"# {release_info.version}")
@@ -334,15 +430,15 @@ class MarkdownFormatter:
         lines.append("")
 
         if release_info.highlights:
-            lines.append("## ✨ Highlights")
+            lines.append("## Highlights")
             lines.append("")
             for h in release_info.highlights:
                 lines.append(f"- {h}")
             lines.append("")
 
-        breaking = [c for c in entry.changes if c.breaking]
+        breaking = [c for c in changes if c.breaking]
         if breaking:
-            lines.append("## ⚠ Breaking Changes")
+            lines.append("## BREAKING CHANGES")
             lines.append("")
             for c in breaking:
                 lines.append(f"### {c.description}")
@@ -362,8 +458,8 @@ class MarkdownFormatter:
                     lines.append(f"> {note}")
                     lines.append("")
 
-        by_module = {}
-        for c in entry.changes:
+        by_module: dict[str, list[Change]] = {}
+        for c in changes:
             by_module.setdefault(c.module, []).append(c)
 
         for mod in sorted(by_module.keys()):
@@ -384,7 +480,6 @@ class MarkdownFormatter:
 
     def render_pending_items(self, diff: VersionDiff,
                               new_spec: Optional[ApiSpec] = None) -> str:
-        """Render pending review items as a Markdown checklist."""
         lines: list[str] = []
         lines.append("# Pending Review Checklist")
         lines.append("")

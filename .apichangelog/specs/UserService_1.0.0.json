@@ -19,8 +19,7 @@
           "type": "integer",
           "required": false,
           "description": "Page number",
-          "default": 1,
-          "example": null
+          "default": 1
         },
         {
           "name": "limit",
@@ -28,11 +27,9 @@
           "type": "integer",
           "required": false,
           "description": "Items per page",
-          "default": 20,
-          "example": null
+          "default": 20
         }
       ],
-      "request": null,
       "responses": [
         {
           "status_code": 200,
@@ -42,19 +39,13 @@
               "name": "data",
               "type": "array",
               "required": true,
-              "description": "List of users",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": "List of users"
             },
             {
               "name": "total",
               "type": "integer",
               "required": true,
-              "description": "Total count",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": "Total count"
             }
           ],
           "example": {
@@ -85,12 +76,9 @@
           "location": "path",
           "type": "integer",
           "required": true,
-          "description": "User ID",
-          "default": null,
-          "example": null
+          "description": "User ID"
         }
       ],
-      "request": null,
       "responses": [
         {
           "status_code": 200,
@@ -100,37 +88,25 @@
               "name": "id",
               "type": "integer",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "name",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "email",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "role",
               "type": "string",
               "required": false,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
           "example": {
@@ -152,33 +128,6 @@
       "deprecated": false,
       "tags": [],
       "parameters": [],
-      "request": {
-        "content_type": "application/json",
-        "fields": [
-          {
-            "name": "name",
-            "type": "string",
-            "required": true,
-            "description": "Full name",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "email",
-            "type": "string",
-            "required": true,
-            "description": "Email address",
-            "default": null,
-            "example": null,
-            "enum": null
-          }
-        ],
-        "example": {
-          "name": "Jane Smith",
-          "email": "jane@example.com"
-        }
-      },
       "responses": [
         {
           "status_code": 201,
@@ -188,10 +137,7 @@
               "name": "id",
               "type": "integer",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
           "example": {
@@ -199,7 +145,28 @@
           },
           "description": "Created user"
         }
-      ]
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "description": "Full name"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "description": "Email address"
+          }
+        ],
+        "example": {
+          "name": "Jane Smith",
+          "email": "jane@example.com"
+        }
+      }
     },
     {
       "path": "/auth/login",
@@ -210,33 +177,6 @@
       "deprecated": false,
       "tags": [],
       "parameters": [],
-      "request": {
-        "content_type": "application/json",
-        "fields": [
-          {
-            "name": "username",
-            "type": "string",
-            "required": true,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          },
-          {
-            "name": "password",
-            "type": "string",
-            "required": true,
-            "description": "",
-            "default": null,
-            "example": null,
-            "enum": null
-          }
-        ],
-        "example": {
-          "username": "john",
-          "password": "secret123"
-        }
-      },
       "responses": [
         {
           "status_code": 200,
@@ -246,19 +186,13 @@
               "name": "token",
               "type": "string",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             },
             {
               "name": "expires_in",
               "type": "integer",
               "required": true,
-              "description": "",
-              "default": null,
-              "example": null,
-              "enum": null
+              "description": ""
             }
           ],
           "example": {
@@ -267,7 +201,28 @@
           },
           "description": "Login successful"
         }
-      ]
+      ],
+      "request": {
+        "content_type": "application/json",
+        "fields": [
+          {
+            "name": "username",
+            "type": "string",
+            "required": true,
+            "description": ""
+          },
+          {
+            "name": "password",
+            "type": "string",
+            "required": true,
+            "description": ""
+          }
+        ],
+        "example": {
+          "username": "john",
+          "password": "secret123"
+        }
+      }
     }
   ]
 }
