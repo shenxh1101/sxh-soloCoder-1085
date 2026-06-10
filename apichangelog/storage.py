@@ -67,6 +67,7 @@ class Storage:
             version=data.get("version", "0.0.0"),
             base_url=data.get("base_url", ""),
             description=data.get("description", ""),
+            owner=data.get("owner", ""),
         )
         for ep_data in data.get("endpoints", []):
             spec.endpoints.append(self._parse_endpoint(ep_data))
@@ -74,11 +75,14 @@ class Storage:
 
     def _parse_openapi(self, data: dict) -> ApiSpec:
         info = data.get("info", {})
+        contact = info.get("contact", {})
+        owner = info.get("x-owner", contact.get("email", contact.get("name", "")))
         spec = ApiSpec(
             name=info.get("title", "API"),
             version=info.get("version", "0.0.0"),
             base_url=data.get("servers", [{}])[0].get("url", ""),
             description=info.get("description", ""),
+            owner=owner,
         )
         paths = data.get("paths", {})
         components = data.get("components", {})
@@ -103,6 +107,7 @@ class Storage:
             description=op_data.get("description", ""),
             deprecated=op_data.get("deprecated", False),
             tags=tags,
+            owner=op_data.get("x-owner", ""),
         )
 
         for param in op_data.get("parameters", []):
@@ -201,6 +206,7 @@ class Storage:
             description=data.get("description", ""),
             deprecated=data.get("deprecated", False),
             tags=data.get("tags", []),
+            owner=data.get("owner", ""),
         )
         for p in data.get("parameters", []):
             ep.parameters.append(ParameterDef(
@@ -300,6 +306,8 @@ class Storage:
                     } for r in ep.responses
                 ],
             }
+            if ep.owner:
+                ep_dict["owner"] = ep.owner
             if ep.request is not None:
                 ep_dict["request"] = {
                     "content_type": ep.request.content_type,
@@ -310,13 +318,16 @@ class Storage:
                     **({"example": ep.request.example} if ep.request.example is not None else {}),
                 }
             endpoints.append(ep_dict)
-        return {
+        result: dict[str, Any] = {
             "name": spec.name,
             "version": spec.version,
             "base_url": spec.base_url,
             "description": spec.description,
             "endpoints": endpoints,
         }
+        if spec.owner:
+            result["owner"] = spec.owner
+        return result
 
     # ---------- Changelog Management ----------
 
@@ -387,6 +398,7 @@ class Storage:
                 confirmed=c.get("confirmed", False),
                 notes=c.get("notes", []),
                 migration_guide=c.get("migration_guide", ""),
+                assignee=c.get("assignee", ""),
             ))
         release_date = data.get("release_date")
         status_str = data.get("status")
@@ -409,6 +421,8 @@ class Storage:
             release_template=data.get("release_template", ""),
             markdown_path=data.get("markdown_path", ""),
             diff_from_version=data.get("diff_from_version", ""),
+            owner=data.get("owner", ""),
+            module_owners=data.get("module_owners", {}),
         )
 
     def _entry_to_dict(self, entry: ChangelogEntry) -> dict:
@@ -437,6 +451,7 @@ class Storage:
                     "confirmed": c.confirmed,
                     "notes": c.notes,
                     "migration_guide": c.migration_guide,
+                    "assignee": c.assignee,
                 } for c in entry.changes
             ],
             "notes": entry.notes,
@@ -447,6 +462,8 @@ class Storage:
             "release_template": entry.release_template,
             "markdown_path": entry.markdown_path,
             "diff_from_version": entry.diff_from_version,
+            "owner": entry.owner,
+            "module_owners": entry.module_owners,
         }
 
     # ---------- Aggregation helpers ----------
@@ -618,3 +635,172 @@ class Storage:
                 zf.extract(name, self.changelog_dir)
                 imported += 1
         return imported
+
+    # ---------- Release gate check ----------
+
+    def release_gate_check(self, spec_name: str, version: str) -> dict:
+        """Check whether a release can proceed based on channel rules.
+
+        Rules:
+          - public: zero pending items and zero breaking-without-migration
+          - beta/internal: pending items allowed, but must list assignees/owners
+          - (no channel): same as public
+
+        Returns dict with: passed(bool), channel, reasons(list), next_steps(list),
+        pending_by_owner(dict[owner, list[Change]]), missing_migration_by_owner(dict[owner, list[Change]])
+        """
+        entry = self.get_entry(spec_name, version)
+        if entry is None:
+            return {
+                "passed": False,
+                "channel": "",
+                "reasons": ["No changelog entry found - run diff --save first"],
+                "next_steps": [f"Run: apichangelog diff <old> {spec_name}:{version} --save"],
+                "pending_by_owner": {},
+                "missing_migration_by_owner": {},
+            }
+
+        channel = entry.release_channel or "public"
+        pending = [c for c in entry.changes if c.is_pending()]
+        missing_mig = [c for c in entry.changes if c.breaking and not c.migration_guide]
+
+        module_owners = dict(entry.module_owners)
+        spec_owner = entry.owner or ""
+
+        def _owner_of(change: Change) -> str:
+            if change.assignee:
+                return change.assignee
+            if change.module in module_owners:
+                return module_owners[change.module]
+            return spec_owner
+
+        pending_by_owner: dict[str, list] = {}
+        for c in pending:
+            pending_by_owner.setdefault(_owner_of(c) or "(unassigned)", []).append(c)
+
+        missing_mig_by_owner: dict[str, list] = {}
+        for c in missing_mig:
+            missing_mig_by_owner.setdefault(_owner_of(c) or "(unassigned)", []).append(c)
+
+        reasons: list[str] = []
+        next_steps: list[str] = []
+        passed = True
+
+        if channel == "public" or not channel:
+            if pending:
+                passed = False
+                reasons.append(f"Channel '{channel}' requires zero pending items (found {len(pending)})")
+                next_steps.append(
+                    f"Run: apichangelog review {spec_name}:{version} --confirm all"
+                )
+            if missing_mig:
+                passed = False
+                reasons.append(
+                    f"Channel '{channel}' requires all breaking changes to have migration guides "
+                    f"(found {len(missing_mig)})"
+                )
+                owners = ", ".join(sorted(missing_mig_by_owner.keys()))
+                next_steps.append(
+                    f"Ask these owners to add migration guides: {owners}"
+                )
+        else:
+            if pending:
+                reasons.append(
+                    f"Channel '{channel}' allows pending items ({len(pending)} total) "
+                    "- confirm assignees are aware"
+                )
+            if missing_mig:
+                reasons.append(
+                    f"Channel '{channel}' allows breaking changes without migration "
+                    f"({len(missing_mig)} total) - consider adding before GA"
+                )
+
+        return {
+            "passed": passed,
+            "channel": channel,
+            "reasons": reasons,
+            "next_steps": next_steps,
+            "pending_by_owner": pending_by_owner,
+            "missing_migration_by_owner": missing_mig_by_owner,
+        }
+
+    # ---------- Incremental workspace import (merge by Service:Version) ----------
+
+    def import_workspace_merge(self, input_path: str) -> dict:
+        """Import workspace incrementally, merging by (spec_name, version).
+
+        Returns dict with:
+          merged: list of (spec_name, version) successfully merged
+          conflicts: list of (spec_name, version) that exist locally and differ
+          imported_new: list of (spec_name, version) imported for the first time
+          skipped_specs: list of spec filenames that couldn't be parsed
+        """
+        src = Path(input_path)
+        if not src.exists():
+            raise FileNotFoundError(f"Import archive not found: {input_path}")
+
+        result = {
+            "merged": [],
+            "conflicts": [],
+            "imported_new": [],
+            "skipped_specs": [],
+        }
+
+        tmp_dir = self.changelog_dir / "_import_tmp"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with zipfile.ZipFile(src, "r") as zf:
+                zf.extractall(tmp_dir)
+
+            tmp_changelog = tmp_dir / DEFAULT_CHANGELOG_FILE
+            if tmp_changelog.exists():
+                with open(tmp_changelog, "r", encoding="utf-8") as f:
+                    incoming_entries = [
+                        self._entry_from_dict(d) for d in json.load(f)
+                    ]
+
+                local_entries = {
+                    (e.spec_name, e.version): e for e in self.load_changelog()
+                }
+                updated_entries = list(local_entries.values())
+
+                for ie in incoming_entries:
+                    key = (ie.spec_name, ie.version)
+                    if key not in local_entries:
+                        updated_entries.append(ie)
+                        result["imported_new"].append(key)
+                    else:
+                        local = local_entries[key]
+                        local_json = json.dumps(self._entry_to_dict(local), sort_keys=True)
+                        incoming_json = json.dumps(self._entry_to_dict(ie), sort_keys=True)
+                        if local_json == incoming_json:
+                            result["merged"].append(key)
+                        else:
+                            result["conflicts"].append(key)
+                            updated_entries.append(ie)
+
+                self.save_changelog(updated_entries)
+
+            tmp_specs_dir = tmp_dir / DEFAULT_SPECS_DIR
+            if tmp_specs_dir.exists():
+                for f in tmp_specs_dir.glob("*.json"):
+                    target = self.specs_dir / f.name
+                    if not target.exists():
+                        f.rename(target)
+                        try:
+                            with open(target, "r", encoding="utf-8") as fh:
+                                data = json.load(fh)
+                            sn = data.get("name", "")
+                            sv = data.get("version", "")
+                            if sn and sv:
+                                result["imported_new"].append((sn, sv))
+                        except Exception:
+                            result["skipped_specs"].append(f.name)
+                    else:
+                        f.unlink()
+        finally:
+            import shutil
+            if tmp_dir.exists():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        return result

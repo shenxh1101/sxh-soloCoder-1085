@@ -108,8 +108,14 @@ def main(ctx: click.Context, base_dir: Optional[str]) -> None:
               help="Save the scanned spec to storage for later comparison")
 @click.option("--output", "-o", type=click.Path(), default=None,
               help="Output Markdown summary to file")
+@click.option("--owner", type=str, default=None,
+              help="Service owner name/email")
+@click.option("--module-owner", "module_owners", type=str, multiple=True,
+              help="Module owner as 'ModuleName:owner@x.com' (repeatable)")
 @click.pass_context
-def scan(ctx: click.Context, spec_ref: str, save_spec: bool, output: Optional[str]) -> None:
+def scan(ctx: click.Context, spec_ref: str, save_spec: bool,
+         output: Optional[str], owner: Optional[str],
+         module_owners: tuple[str, ...]) -> None:
     """Read API spec file and list endpoints, fields, and missing examples.
 
     SPEC_REF: path to YAML/JSON file, or 'ServiceName:version' to re-read a saved spec.
@@ -118,6 +124,21 @@ def scan(ctx: click.Context, spec_ref: str, save_spec: bool, output: Optional[st
     storage: Storage = ctx.obj["storage"]
 
     spec = _parse_spec_ref(spec_ref, ctx, storage)
+
+    if owner:
+        spec.owner = owner
+
+    if module_owners:
+        parsed_module_owners: dict[str, str] = {}
+        for mo in module_owners:
+            if ":" in mo:
+                mod_name, mod_owner = mo.split(":", 1)
+                parsed_module_owners[mod_name.strip()] = mod_owner.strip()
+        if parsed_module_owners:
+            for ep in spec.endpoints:
+                if not ep.owner and ep.module in parsed_module_owners:
+                    ep.owner = parsed_module_owners[ep.module]
+
     console.print_spec_summary(spec)
 
     no_examples = [ep for ep in spec.endpoints if not ep.has_examples()]
@@ -131,6 +152,8 @@ def scan(ctx: click.Context, spec_ref: str, save_spec: bool, output: Optional[st
         path = storage.save_stored_spec(spec)
         click.echo()
         click.secho(f"[OK] Spec saved: {spec.name}:{spec.version} -> {path}", fg="green")
+        if owner or module_owners:
+            click.secho(f"    Owners: service={owner or '(default)'}, modules={len(parsed_module_owners) if module_owners else 0}", fg="cyan")
 
     if output:
         lines = [f"# {spec.name} {spec.version}", ""]
@@ -167,10 +190,15 @@ def scan(ctx: click.Context, spec_ref: str, save_spec: bool, output: Optional[st
               help="Write pending review checklist as Markdown to file")
 @click.option("--save", "save_changes", is_flag=True, default=False,
               help="Save diff as changelog entry for the new version")
+@click.option("--owner", type=str, default=None,
+              help="Service owner name/email")
+@click.option("--module-owner", "module_owners", type=str, multiple=True,
+              help="Module owner as 'ModuleName:owner@x.com' (repeatable)")
 @click.pass_context
 def diff(ctx: click.Context, old_ref: str, new_ref: str,
          modules: tuple[str, ...], output: Optional[str],
-         pending_output: Optional[str], save_changes: bool) -> None:
+         pending_output: Optional[str], save_changes: bool,
+         owner: Optional[str], module_owners: tuple[str, ...]) -> None:
     """Compare two API versions and show additions, deletions, and field changes.
 
     OLD_REF / NEW_REF: file path or 'ServiceName:version'.
@@ -188,6 +216,21 @@ def diff(ctx: click.Context, old_ref: str, new_ref: str,
     if modules:
         module_set = set(modules)
         version_diff.changes = [c for c in version_diff.changes if c.module in module_set]
+
+    parsed_module_owners: dict[str, str] = {}
+    for mo in module_owners:
+        if ":" in mo:
+            mod_name, mod_owner = mo.split(":", 1)
+            parsed_module_owners[mod_name.strip()] = mod_owner.strip()
+
+    if owner and not new_spec.owner:
+        new_spec.owner = owner
+    if parsed_module_owners:
+        for c in version_diff.changes:
+            if not c.assignee and c.module in parsed_module_owners:
+                c.assignee = parsed_module_owners[c.module]
+            elif not c.assignee and new_spec.owner:
+                c.assignee = new_spec.owner
 
     console.print_diff(version_diff, new_spec)
 
@@ -209,6 +252,10 @@ def diff(ctx: click.Context, old_ref: str, new_ref: str,
         entry.changes = version_diff.changes
         entry.diff_from_version = old_spec.version
         entry.spec_name = new_spec.name
+        if owner or new_spec.owner:
+            entry.owner = owner or new_spec.owner
+        if parsed_module_owners:
+            entry.module_owners.update(parsed_module_owners)
         storage.upsert_entry(entry)
         click.echo()
         click.secho(
@@ -216,6 +263,13 @@ def diff(ctx: click.Context, old_ref: str, new_ref: str,
             f"(diff from {old_spec.version})",
             fg="green",
         )
+        if entry.owner or entry.module_owners:
+            owners_info = []
+            if entry.owner:
+                owners_info.append(f"service={entry.owner}")
+            if entry.module_owners:
+                owners_info.append(f"modules={len(entry.module_owners)}")
+            click.secho(f"    Owners: {', '.join(owners_info)}", fg="cyan")
 
 
 # ============================================================
@@ -329,13 +383,23 @@ def note(ctx: click.Context, entry_ref: str, change_index: Optional[int],
               type=click.Choice(["default", "public", "internal", "beta"]),
               default=None,
               help="Markdown template for release notes")
+@click.option("--gate", is_flag=True, default=False,
+              help="Run release gate check; block publishing if public channel fails")
+@click.option("--gate-only", is_flag=True, default=False,
+              help="Only run gate check without modifying the release entry")
+@click.option("--owner", type=str, default=None,
+              help="Set service owner")
+@click.option("--module-owner", "module_owners_opt", type=str, multiple=True,
+              help="Set module owner: 'ModuleName:owner@x.com' (repeatable)")
 @click.pass_context
 def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
             highlights: tuple[str, ...], modules: tuple[str, ...],
             output: Optional[str], no_preview: bool,
             draft: bool, publish: bool,
             published_by: Optional[str], channel: Optional[str],
-            template_name: Optional[str]) -> None:
+            template_name: Optional[str],
+            gate: bool, gate_only: bool,
+            owner: Optional[str], module_owners_opt: tuple[str, ...]) -> None:
     """Generate changelog, maintain release metadata. Supports DRAFT/PUBLISHED status.
 
     ENTRY_REF: 'ServiceName:version' or just 'version'.
@@ -345,6 +409,14 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
     md: MarkdownFormatter = ctx.obj["markdown"]
 
     entry = _resolve_entry(storage, entry_ref, "release")
+
+    if owner:
+        entry.owner = owner
+    if module_owners_opt:
+        for mo in module_owners_opt:
+            if ":" in mo:
+                mod_name, mod_owner = mo.split(":", 1)
+                entry.module_owners[mod_name.strip()] = mod_owner.strip()
 
     if modules:
         module_set = set(modules)
@@ -368,6 +440,23 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
         highlights=list(highlights),
         modules=entry_modules,
     )
+
+    effective_channel = channel or entry.release_channel or "public"
+
+    if gate_only or gate:
+        if channel:
+            entry.release_channel = channel
+            storage.upsert_entry(entry)
+        report = storage.release_gate_check(entry.spec_name, entry.version)
+        console.print_release_gate(entry.spec_name, entry.version, report)
+        if gate_only:
+            return
+        if not report["passed"] and report["channel"] == "public" and publish:
+            click.secho(
+                "\n[!] Gate check failed for public channel - release blocked.",
+                fg="red",
+            )
+            sys.exit(2)
 
     entry.release_date = parsed_date
     if published_by:
@@ -424,6 +513,8 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
 
     status = entry.status.value.upper()
     click.echo(f"  Status: {status}")
+    if entry.owner:
+        click.echo(f"  Owner: {entry.owner}")
     if entry.released_by:
         click.echo(f"  Released by: {entry.released_by}")
     if entry.release_channel:
@@ -437,7 +528,8 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
         click.secho(f"[!] {len(pending)} changes still pending review:", fg="yellow")
         for c in pending:
             tag = " [BREAKING]" if c.breaking else ""
-            click.echo(f"  - {c.description}{tag}")
+            owner_tag = f" @{c.assignee}" if c.assignee else ""
+            click.echo(f"  - {c.description}{tag}{owner_tag}")
 
 
 # ============================================================
@@ -526,7 +618,8 @@ def services_cmd(ctx: click.Context, service: Optional[str],
         summary = {service: summary[service]}
 
     rs_enum = (ReleaseStatus(status) if status else None)
-    if rs_enum or channel or has_pending:
+    has_filters = (rs_enum is not None) or (channel is not None) or has_pending
+    if has_filters:
         filtered_entries = storage.list_entries_filtered(
             status=rs_enum, channel=channel,
             has_pending=(True if has_pending else None),
@@ -536,15 +629,23 @@ def services_cmd(ctx: click.Context, service: Optional[str],
             by_svc.setdefault(e.spec_name, set()).add(e.version)
         filtered_services = set(by_svc.keys())
 
+        if not filtered_services:
+            click.secho(
+                f"[OK] No services match filters (status={status or 'any'}, "
+                f"channel={channel or 'any'}, pending={'yes' if has_pending else 'any'})",
+                fg="yellow",
+            )
+            return
+
         summary = {
             name: {
                 "versions": [v for v in data["versions"]
-                             if not by_svc.get(name) or v[0] in by_svc.get(name, set())],
+                             if v[0] in by_svc.get(name, set())],
                 "entries": [e for e in data["entries"]
-                            if not by_svc.get(e.spec_name) or e.version in by_svc.get(e.spec_name, set())],
+                            if e.version in by_svc.get(name, set())],
             }
             for name, data in summary.items()
-            if name in filtered_services or not filtered_services
+            if name in filtered_services
         }
         summary = {
             n: d for n, d in summary.items()
@@ -568,11 +669,18 @@ def services_cmd(ctx: click.Context, service: Optional[str],
               help="Add migration guide: --migrate INDEX:GUIDE")
 @click.option("--note", "-n", "note_text", type=str, default=None,
               help="Add a note: --note INDEX:NOTE")
+@click.option("--assignee", type=str, default=None,
+              help="Set assignee: --assignee INDEX:OWNER or --assignee OWNER (for all)")
+@click.option("--owner", type=str, default=None,
+              help="Set service owner for the release entry")
+@click.option("--module-owner", "module_owners", type=str, multiple=True,
+              help="Set module owner: 'ModuleName:owner@x.com' (repeatable)")
 @click.pass_context
 def review(ctx: click.Context, entry_ref: str, modules: tuple[str, ...],
            confirm_indices: Optional[str], migrate: Optional[str],
-           note_text: Optional[str]) -> None:
-    """Review pending changes: list unconfirmed items, batch confirm, add notes."""
+           note_text: Optional[str], assignee: Optional[str],
+           owner: Optional[str], module_owners: tuple[str, ...]) -> None:
+    """Review pending changes: list unconfirmed items, batch confirm, add notes, assign owners."""
     storage: Storage = ctx.obj["storage"]
     console: ConsoleFormatter = ctx.obj["console"]
 
@@ -583,7 +691,30 @@ def review(ctx: click.Context, entry_ref: str, modules: tuple[str, ...],
         module_set = set(modules)
         changes = [c for c in changes if c.module in module_set]
 
-    if not confirm_indices and not migrate and not note_text:
+    if owner:
+        entry.owner = owner
+
+    if module_owners:
+        for mo in module_owners:
+            if ":" in mo:
+                mod_name, mod_owner = mo.split(":", 1)
+                entry.module_owners[mod_name.strip()] = mod_owner.strip()
+
+    if assignee:
+        if ":" in assignee and assignee.split(":", 1)[0].strip().isdigit():
+            idx_str, owner_val = assignee.split(":", 1)
+            idx = int(idx_str.strip())
+            if idx < 0 or idx >= len(changes):
+                raise click.BadParameter(f"Invalid assignee index {idx}. Valid: 0-{len(changes)-1}")
+            changes[idx].assignee = owner_val.strip()
+            click.secho(f"  [OK] Assigned [{idx}] to @{owner_val.strip()}", fg="green")
+        else:
+            for c in changes:
+                if not c.assignee:
+                    c.assignee = assignee
+            click.secho(f"  [OK] Assigned {len(changes)} changes to @{assignee}", fg="green")
+
+    if not confirm_indices and not migrate and not note_text and not assignee and not owner and not module_owners:
         console.print_review_list(entry, changes)
         return
 
@@ -612,6 +743,9 @@ def review(ctx: click.Context, entry_ref: str, modules: tuple[str, ...],
         storage.upsert_entry(entry)
         click.secho(f"  [OK] Note added to [{idx}]", fg="green")
         _print_pending_summary(changes)
+
+    if assignee or owner or module_owners:
+        storage.upsert_entry(entry)
 
 
 def _parse_indices(value: str, max_len: int) -> list[int]:
@@ -651,9 +785,11 @@ def _print_pending_summary(changes: list[Change]) -> None:
 
 @main.command()
 @click.argument("entry_ref", required=True)
+@click.option("--by-owner", is_flag=True, default=False,
+              help="Group pending items by assignee/owner instead of module")
 @click.pass_context
-def approval(ctx: click.Context, entry_ref: str) -> None:
-    """Approval view: per-module review status before publishing.
+def approval(ctx: click.Context, entry_ref: str, by_owner: bool) -> None:
+    """Approval view: per-module or per-owner review status before publishing.
 
     Shows each module's unconfirmed changes and breaking changes
     missing migration guides.
@@ -663,7 +799,7 @@ def approval(ctx: click.Context, entry_ref: str) -> None:
 
     entry = _resolve_entry(storage, entry_ref, "approval")
     summary = storage.approval_summary(entry.spec_name, entry.version)
-    console.print_approval(entry, summary)
+    console.print_approval(entry, summary, by_owner=by_owner)
 
 
 # ============================================================
@@ -688,10 +824,29 @@ def export_cmd(ctx: click.Context, output: str) -> None:
 @click.argument("archive", required=True, type=click.Path(exists=True))
 @click.option("--overwrite", is_flag=True, default=False,
               help="Overwrite existing files if present")
+@click.option("--merge", "merge_mode", is_flag=True, default=False,
+              help="Incremental merge mode: merge by ServiceName:Version, list conflicts")
 @click.pass_context
-def import_cmd(ctx: click.Context, archive: str, overwrite: bool) -> None:
-    """Import workspace from a zip archive created by 'export'."""
+def import_cmd(ctx: click.Context, archive: str, overwrite: bool,
+               merge_mode: bool) -> None:
+    """Import workspace from a zip archive created by 'export'.
+
+    Use --merge to do an incremental merge by (service, version) key.
+    """
     storage: Storage = ctx.obj["storage"]
+    console: ConsoleFormatter = ctx.obj["console"]
+
+    if merge_mode:
+        result = storage.import_workspace_merge(archive)
+        console.print_import_merge_result(result)
+        if result["conflicts"]:
+            click.secho(
+                f"\n[!] {len(result['conflicts'])} conflict(s) - incoming version overwrote local. "
+                f"Review with: apichangelog versions",
+                fg="yellow",
+            )
+        return
+
     count = storage.import_workspace(archive, overwrite=overwrite)
     click.secho(
         f"[OK] Imported {count} files from {archive}"

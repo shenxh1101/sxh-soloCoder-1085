@@ -29,8 +29,11 @@
         "impact": "low",
         "breaking": false,
         "confirmed": false,
-        "notes": [],
-        "migration_guide": ""
+        "notes": [
+          "本地修改了这一项"
+        ],
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "added",
@@ -51,7 +54,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "added",
@@ -86,7 +90,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "removed",
@@ -114,7 +119,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "modified",
@@ -135,7 +141,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "modified",
@@ -156,7 +163,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "added",
@@ -184,7 +192,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "removed",
@@ -205,7 +214,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "modified",
@@ -233,7 +243,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "added",
@@ -246,7 +257,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "deprecated",
@@ -259,7 +271,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "modified",
@@ -280,7 +293,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "added",
@@ -293,7 +307,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "added",
@@ -314,7 +329,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       },
       {
         "change_type": "modified",
@@ -335,7 +351,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": ""
       }
     ],
     "notes": [],
@@ -345,7 +362,12 @@
     "release_channel": "public",
     "release_template": "",
     "markdown_path": "D:\\code\\TraeProjects\\1085\\examples\\RELEASE_UserService_2.0.0.md",
-    "diff_from_version": "1.0.0"
+    "diff_from_version": "1.0.0",
+    "owner": "alice@example.com",
+    "module_owners": {
+      "auth": "alice@example.com",
+      "users": "alice@example.com"
+    }
   },
   {
     "spec_name": "OrderService",
@@ -378,7 +400,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -399,7 +422,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -420,7 +444,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "removed",
@@ -441,7 +466,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "modified",
@@ -462,7 +488,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -497,7 +524,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "removed",
@@ -525,7 +553,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "modified",
@@ -546,7 +575,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -588,7 +618,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "removed",
@@ -623,7 +654,8 @@
         "breaking": true,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -636,7 +668,8 @@
         "breaking": false,
         "confirmed": false,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "modified",
@@ -657,7 +690,8 @@
         "breaking": false,
         "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -678,7 +712,8 @@
         "breaking": false,
         "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "modified",
@@ -706,7 +741,8 @@
         "breaking": true,
         "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -727,7 +763,8 @@
         "breaking": true,
         "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "removed",
@@ -748,7 +785,8 @@
         "breaking": true,
         "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       },
       {
         "change_type": "added",
@@ -761,7 +799,8 @@
         "breaking": false,
         "confirmed": true,
         "notes": [],
-        "migration_guide": ""
+        "migration_guide": "",
+        "assignee": "bob@example.com"
       }
     ],
     "notes": [],
@@ -771,6 +810,11 @@
     "release_channel": "internal",
     "release_template": "internal",
     "markdown_path": "D:\\code\\TraeProjects\\1085\\examples\\RELEASE_OrderService_2.0.0_internal.md",
-    "diff_from_version": "1.0.0"
+    "diff_from_version": "1.0.0",
+    "owner": "bob@example.com",
+    "module_owners": {
+      "orders": "bob@example.com",
+      "payments": "charlie@example.com"
+    }
   }
 ]

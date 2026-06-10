@@ -307,6 +307,10 @@ class ConsoleFormatter:
             total_no_example = sum(v[2] for v in versions)
             total_endpoints = sum(v[1] for v in versions)
 
+            service_owner = ""
+            if latest_entry and latest_entry.owner:
+                service_owner = latest_entry.owner
+
             if latest_entry:
                 if latest_entry.status == ReleaseStatus.PUBLISHED:
                     latest_status = "[green]PUBLISHED[/green]"
@@ -321,10 +325,12 @@ class ConsoleFormatter:
                 last_release = "-"
                 last_diff = "-"
 
+            owner_str = f"  [dim]owner:[/dim] [blue]{service_owner}[/blue]" if service_owner else ""
             tree = Tree(
                 f"[bold cyan]{name}[/bold cyan]  "
                 f"[dim]latest:[/dim] [green]{latest_version}[/green] {latest_status}  "
                 f"[dim]last release:[/dim] {last_release}"
+                + owner_str
             )
 
             tree.add(
@@ -433,8 +439,9 @@ class ConsoleFormatter:
     # ---------- Approval output ----------
 
     def print_approval(self, entry: ChangelogEntry,
-                       approval_by_module: dict[str, dict]) -> None:
-        """Print per-module approval status for a release candidate."""
+                       approval_by_module: dict[str, dict],
+                       by_owner: bool = False) -> None:
+        """Print per-module or per-owner approval status for a release candidate."""
         total_changes = len(entry.changes)
         total_pending = entry.pending_count
         breaking_no_mig = sum(
@@ -445,17 +452,23 @@ class ConsoleFormatter:
         )
         ready = (total_pending == 0)
 
-        status_label = ("[bold green]READY TO PUBLISH[/bold green]"
-                        if ready else "[bold red]NOT READY[/bold red]")
+        header_parts = [
+            f"[bold cyan]{entry.spec_name} {entry.version}[/bold cyan]  "
+            f"{'[bold green]READY TO PUBLISH[/bold green]' if ready else '[bold red]NOT READY[/bold red]'}"
+        ]
+        if entry.owner:
+            header_parts.append(f"[dim]Service owner:[/dim] {entry.owner}")
+        header_parts.append(
+            f"[dim]Total changes:[/dim] {total_changes}  "
+            f"[dim]Confirmed:[/dim] [green]{total_changes - total_unconfirmed}[/green]  "
+            f"[dim]Unconfirmed:[/dim] [yellow]{total_unconfirmed}[/yellow]"
+        )
+        header_parts.append(
+            f"[dim]Breaking without migration:[/dim] [red]{breaking_no_mig}[/red]  "
+            f"[dim]Pending total:[/dim] [red]{total_pending}[/red]"
+        )
         header = Panel.fit(
-            Text.from_markup(
-                f"[bold cyan]{entry.spec_name} {entry.version}[/bold cyan]  {status_label}\n"
-                f"[dim]Total changes:[/dim] {total_changes}  "
-                f"[dim]Confirmed:[/dim] [green]{total_changes - total_unconfirmed}[/green]  "
-                f"[dim]Unconfirmed:[/dim] [yellow]{total_unconfirmed}[/yellow]\n"
-                f"[dim]Breaking without migration:[/dim] [red]{breaking_no_mig}[/red]  "
-                f"[dim]Pending total:[/dim] [red]{total_pending}[/red]"
-            ),
+            Text.from_markup("\n".join(header_parts)),
             title="Approval Checklist",
             border_style=("green" if ready else "red"),
         )
@@ -466,27 +479,64 @@ class ConsoleFormatter:
             return
 
         self.console.print()
-        for mod in sorted(approval_by_module.keys()):
-            data = approval_by_module[mod]
-            mod_ready = (
-                len(data["unconfirmed"]) == 0
-                and len(data["breaking_no_migration"]) == 0
-            )
-            badge = ("[green][OK][/green]" if mod_ready else "[red][!][/red]")
-            tree = Tree(
-                f"{badge} [bold blue]{mod}[/bold blue]  "
-                f"[dim]{data['total']} changes[/dim]  "
-                f"[yellow]{len(data['unconfirmed'])} unconfirmed[/yellow]  "
-                f"[red]{len(data['breaking_no_migration'])} breaking-no-mig[/red]"
-            )
-            for c in data["unconfirmed"]:
-                tree.add(f"[yellow][-] Needs confirmation: {c.description}[/yellow]")
-            for c in data["breaking_no_migration"]:
-                tree.add(
-                    f"[red][!] Missing migration: {c.description}[/red]"
+        if by_owner:
+            # Build per-owner aggregation from approval_by_module
+            by_owner_data: dict[str, dict] = {}
+            module_owners = getattr(entry, "module_owners", {})
+            spec_owner = getattr(entry, "owner", "")
+            for mod, data in approval_by_module.items():
+                for c in data["unconfirmed"]:
+                    owner = (c.assignee or module_owners.get(mod, spec_owner) or "(unassigned)")
+                    by_owner_data.setdefault(owner, {"unconfirmed": [], "breaking_no_migration": [], "total": 0})
+                    by_owner_data[owner]["unconfirmed"].append(c)
+                    by_owner_data[owner]["total"] += 1
+                for c in data["breaking_no_migration"]:
+                    owner = (c.assignee or module_owners.get(mod, spec_owner) or "(unassigned)")
+                    by_owner_data.setdefault(owner, {"unconfirmed": [], "breaking_no_migration": [], "total": 0})
+                    by_owner_data[owner]["breaking_no_migration"].append(c)
+
+            for owner in sorted(by_owner_data.keys()):
+                data = by_owner_data[owner]
+                owner_ready = (len(data["unconfirmed"]) == 0 and len(data["breaking_no_migration"]) == 0)
+                badge = ("[green][OK][/green]" if owner_ready else "[red][!][/red]")
+                tree = Tree(
+                    f"{badge} [bold blue]@{owner}[/bold blue]  "
+                    f"[dim]total: {data['total']}[/dim]  "
+                    f"[yellow]{len(data['unconfirmed'])} unconfirmed[/yellow]  "
+                    f"[red]{len(data['breaking_no_migration'])} breaking-no-mig[/red]"
                 )
-            self.console.print(tree)
-            self.console.print()
+                for c in data["unconfirmed"]:
+                    tree.add(f"[yellow][-] [{c.module}] {c.description}[/yellow]")
+                for c in data["breaking_no_migration"]:
+                    tree.add(f"[red][!] [{c.module}] {c.description}[/red]")
+                self.console.print(tree)
+                self.console.print()
+        else:
+            for mod in sorted(approval_by_module.keys()):
+                data = approval_by_module[mod]
+                mod_ready = (
+                    len(data["unconfirmed"]) == 0
+                    and len(data["breaking_no_migration"]) == 0
+                )
+                badge = ("[green][OK][/green]" if mod_ready else "[red][!][/red]")
+                owner_tag = ""
+                module_owners = getattr(entry, "module_owners", {})
+                if mod in module_owners:
+                    owner_tag = f" [dim](@{module_owners[mod]})[/dim]"
+                tree = Tree(
+                    f"{badge} [bold blue]{mod}[/bold blue]{owner_tag}  "
+                    f"[dim]{data['total']} changes[/dim]  "
+                    f"[yellow]{len(data['unconfirmed'])} unconfirmed[/yellow]  "
+                    f"[red]{len(data['breaking_no_migration'])} breaking-no-mig[/red]"
+                )
+                for c in data["unconfirmed"]:
+                    tag = f" [dim](@{c.assignee})[/dim]" if c.assignee else ""
+                    tree.add(f"[yellow][-] {c.description}[/yellow]{tag}")
+                for c in data["breaking_no_migration"]:
+                    tag = f" [dim](@{c.assignee})[/dim]" if c.assignee else ""
+                    tree.add(f"[red][!] {c.description}[/red]{tag}")
+                self.console.print(tree)
+                self.console.print()
 
     # ---------- Health check output ----------
 
@@ -547,6 +597,121 @@ class ConsoleFormatter:
         if issues == 0:
             self.console.print()
             self.console.print("[green]All healthy - nothing to address.[/green]")
+
+    # ---------- Release gate output ----------
+
+    def print_release_gate(self, spec_name: str, version: str,
+                            report: dict) -> None:
+        """Print release gate check result with reasons and next steps."""
+        passed: bool = report["passed"]
+        channel: str = report["channel"]
+        reasons: list[str] = report["reasons"]
+        next_steps: list[str] = report["next_steps"]
+        pending_by_owner: dict = report["pending_by_owner"]
+        missing_mig_by_owner: dict = report["missing_migration_by_owner"]
+
+        status_label = ("[bold green]PASS[/bold green]" if passed
+                        else "[bold red]FAIL[/bold red]")
+        header = Panel.fit(
+            Text.from_markup(
+                f"[bold cyan]{spec_name} {version}[/bold cyan]  {status_label}\n"
+                f"[dim]Channel:[/dim] [magenta]{channel}[/magenta]  "
+                f"[dim]Pending:[/dim] [yellow]{sum(len(v) for v in pending_by_owner.values())}[/yellow]  "
+                f"[dim]No-mig breaking:[/dim] [red]{sum(len(v) for v in missing_mig_by_owner.values())}[/red]"
+            ),
+            title="Release Gate Check",
+            border_style=("green" if passed else "red"),
+        )
+        self.console.print(header)
+
+        if reasons:
+            self.console.print()
+            self.console.print("[bold yellow]Check results:[/bold yellow]")
+            for r in reasons:
+                self.console.print(f"  - {r}")
+
+        if next_steps:
+            self.console.print()
+            self.console.print("[bold green]Next steps:[/bold green]")
+            for s in next_steps:
+                self.console.print(f"  > {s}")
+
+        if pending_by_owner and not passed:
+            self.console.print()
+            self.console.print("[bold yellow]Pending items by owner:[/bold yellow]")
+            for owner in sorted(pending_by_owner.keys()):
+                items = pending_by_owner[owner]
+                tree = Tree(
+                    f"[bold blue]@{owner}[/bold blue]  "
+                    f"[dim]{len(items)} pending[/dim]"
+                )
+                for c in items:
+                    tag = " [red][BREAKING][/red]" if c.breaking else ""
+                    tree.add(f"[yellow][{c.module}] {c.description}[/yellow]{tag}")
+                self.console.print(tree)
+
+        if missing_mig_by_owner and not passed:
+            self.console.print()
+            self.console.print("[bold red]Breaking changes missing migration guide:[/bold red]")
+            for owner in sorted(missing_mig_by_owner.keys()):
+                items = missing_mig_by_owner[owner]
+                tree = Tree(
+                    f"[bold blue]@{owner}[/bold blue]  "
+                    f"[dim]{len(items)} missing guides[/dim]"
+                )
+                for c in items:
+                    tree.add(f"[red][{c.module}] {c.description}[/red]")
+                self.console.print(tree)
+
+    # ---------- Import merge result output ----------
+
+    def print_import_merge_result(self, result: dict) -> None:
+        """Print incremental import merge summary."""
+        merged = result["merged"]
+        conflicts = result["conflicts"]
+        imported_new = result["imported_new"]
+        skipped = result["skipped_specs"]
+
+        total = len(merged) + len(conflicts) + len(imported_new)
+        header = Panel.fit(
+            Text.from_markup(
+                f"[dim]Entries processed:[/dim] {total}\n"
+                f"[green]Merged (identical):[/green] {len(merged)}  "
+                f"[yellow]Imported new:[/yellow] {len(imported_new)}  "
+                f"[red]Conflicts (overwrote local):[/red] {len(conflicts)}  "
+                f"[dim]Skipped specs:[/dim] {len(skipped)}"
+            ),
+            title="Workspace Import (Merge Mode)",
+            border_style=("green" if not conflicts else "yellow"),
+        )
+        self.console.print(header)
+
+        if imported_new:
+            self.console.print()
+            self.console.print("[green]New entries imported:[/green]")
+            for sn, sv in imported_new:
+                self.console.print(f"  - [cyan]{sn}:{sv}[/cyan]")
+
+        if merged:
+            self.console.print()
+            self.console.print("[green]Identical entries (no change):[/green]")
+            for sn, sv in merged:
+                self.console.print(f"  - [cyan]{sn}:{sv}[/cyan]")
+
+        if conflicts:
+            self.console.print()
+            self.console.print("[yellow][!] Conflicts detected - incoming version overwrote local:[/yellow]")
+            for sn, sv in conflicts:
+                self.console.print(
+                    f"  - [red]{sn}:{sv}[/red]  "
+                    f"[dim](run 'versions {sn}:{sv}' to inspect)[/dim]"
+                )
+
+        if skipped:
+            self.console.print()
+            self.console.print("[dim]Skipped spec files (parse errors):[/dim]")
+            for name in skipped:
+                self.console.print(f"  - {name}")
 
 
 class MarkdownFormatter:

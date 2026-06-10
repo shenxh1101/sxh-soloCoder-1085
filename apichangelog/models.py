@@ -91,6 +91,7 @@ class EndpointDef:
     request: Optional[RequestDef] = None
     responses: list[ResponseDef] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    owner: str = ""
 
     @property
     def key(self) -> str:
@@ -111,6 +112,7 @@ class ApiSpec:
     base_url: str = ""
     description: str = ""
     endpoints: list[EndpointDef] = field(default_factory=list)
+    owner: str = ""
 
     def endpoint_map(self) -> dict[str, EndpointDef]:
         return {ep.key: ep for ep in self.endpoints}
@@ -149,6 +151,7 @@ class Change:
     confirmed: bool = False
     notes: list[str] = field(default_factory=list)
     migration_guide: str = ""
+    assignee: str = ""
 
     def is_pending(self) -> bool:
         """Check if change needs human review."""
@@ -214,6 +217,8 @@ class ChangelogEntry:
     release_template: str = ""
     markdown_path: str = ""
     diff_from_version: str = ""
+    owner: str = ""
+    module_owners: dict[str, str] = field(default_factory=dict)
 
     @property
     def released(self) -> bool:
