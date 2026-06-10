@@ -325,12 +325,17 @@ def note(ctx: click.Context, entry_ref: str, change_index: Optional[int],
               help="Record who performed the release (name/email)")
 @click.option("--channel", type=str, default=None,
               help="Release channel, e.g. internal, public, stable, beta")
+@click.option("--template", "template_name",
+              type=click.Choice(["default", "public", "internal", "beta"]),
+              default=None,
+              help="Markdown template for release notes")
 @click.pass_context
 def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
             highlights: tuple[str, ...], modules: tuple[str, ...],
             output: Optional[str], no_preview: bool,
             draft: bool, publish: bool,
-            published_by: Optional[str], channel: Optional[str]) -> None:
+            published_by: Optional[str], channel: Optional[str],
+            template_name: Optional[str]) -> None:
     """Generate changelog, maintain release metadata. Supports DRAFT/PUBLISHED status.
 
     ENTRY_REF: 'ServiceName:version' or just 'version'.
@@ -369,6 +374,8 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
         entry.released_by = published_by
     if channel:
         entry.release_channel = channel
+    if template_name:
+        entry.release_template = template_name
     if draft:
         entry.status = ReleaseStatus.DRAFT
     if publish:
@@ -386,11 +393,17 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
     if not no_preview:
         console.print_release_preview(entry, release_info, filtered_changes)
 
+    effective_template = entry.release_template or "default"
     if output:
-        content = md.render_release(entry, release_info, filtered_changes)
+        content = md.render_release(entry, release_info, filtered_changes,
+                                     template=effective_template)
         Path(output).write_text(content, encoding="utf-8")
         click.echo()
-        click.secho(f"[OK] Release notes written to: {resolved_md_path}", fg="green")
+        click.secho(
+            f"[OK] Release notes written to: {resolved_md_path} "
+            f"(template={effective_template})",
+            fg="green",
+        )
 
     breaking_count = len([c for c in filtered_changes if c.breaking])
     added_count = len([c for c in filtered_changes if c.change_type == ChangeType.ADDED])
@@ -415,6 +428,8 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
         click.echo(f"  Released by: {entry.released_by}")
     if entry.release_channel:
         click.echo(f"  Channel: {entry.release_channel}")
+    if entry.release_template:
+        click.echo(f"  Template: {entry.release_template}")
 
     pending = [c for c in filtered_changes if c.is_pending()]
     if pending:
@@ -432,8 +447,18 @@ def release(ctx: click.Context, entry_ref: str, release_date: Optional[str],
 @main.command()
 @click.option("--service", "-s", type=str, default=None,
               help="Filter by service name")
+@click.option("--status", type=click.Choice(["draft", "published"]),
+              default=None, help="Filter by release status")
+@click.option("--channel", type=str, default=None,
+              help="Filter by release channel")
+@click.option("--pending", "has_pending", is_flag=True, default=False,
+              help="Only show versions with pending review items")
+@click.option("--no-pending", "no_pending", is_flag=True, default=False,
+              help="Only show versions with no pending items")
 @click.pass_context
-def versions(ctx: click.Context, service: Optional[str]) -> None:
+def versions(ctx: click.Context, service: Optional[str],
+             status: Optional[str], channel: Optional[str],
+             has_pending: bool, no_pending: bool) -> None:
     """List saved specs and changelog entries across all services."""
     storage: Storage = ctx.obj["storage"]
     console: ConsoleFormatter = ctx.obj["console"]
@@ -442,11 +467,25 @@ def versions(ctx: click.Context, service: Optional[str]) -> None:
     if service:
         specs = [(n, v) for n, v in specs if n == service]
 
-    entries = storage.load_changelog()
+    rs_enum = (ReleaseStatus(status) if status else None)
+    pending_flag: Optional[bool] = None
+    if has_pending:
+        pending_flag = True
+    if no_pending:
+        pending_flag = False
+
+    entries = storage.list_entries_filtered(
+        spec_name=service, status=rs_enum,
+        channel=channel, has_pending=pending_flag,
+    )
+
     entry_map: dict[tuple[str, str], ChangelogEntry] = {}
     for e in entries:
-        if not service or e.spec_name == service:
-            entry_map[(e.spec_name, e.version)] = e
+        entry_map[(e.spec_name, e.version)] = e
+
+    if status or channel or pending_flag is not None:
+        spec_keys = set(entry_map.keys())
+        specs = [(n, v) for n, v in specs if (n, v) in spec_keys]
 
     console.print_versions(specs, entry_map)
 
@@ -458,11 +497,26 @@ def versions(ctx: click.Context, service: Optional[str]) -> None:
 @main.command("services")
 @click.option("--service", "-s", type=str, default=None,
               help="Show only a specific service")
+@click.option("--status", type=click.Choice(["draft", "published"]),
+              default=None, help="Filter versions by release status")
+@click.option("--channel", type=str, default=None,
+              help="Filter versions by release channel")
+@click.option("--pending", "has_pending", is_flag=True, default=False,
+              help="Only show services with pending review items")
+@click.option("--health", "health_check", is_flag=True, default=False,
+              help="Run workspace health check")
 @click.pass_context
-def services_cmd(ctx: click.Context, service: Optional[str]) -> None:
+def services_cmd(ctx: click.Context, service: Optional[str],
+                 status: Optional[str], channel: Optional[str],
+                 has_pending: bool, health_check: bool) -> None:
     """Workspace overview: grouped by service, with version lines and stats."""
     storage: Storage = ctx.obj["storage"]
     console: ConsoleFormatter = ctx.obj["console"]
+
+    if health_check:
+        report = storage.health_check()
+        console.print_health_check(report)
+        return
 
     summary = storage.workspace_summary()
     if service:
@@ -470,6 +524,32 @@ def services_cmd(ctx: click.Context, service: Optional[str]) -> None:
             click.secho(f"[!] Service '{service}' not found in workspace", fg="red")
             sys.exit(1)
         summary = {service: summary[service]}
+
+    rs_enum = (ReleaseStatus(status) if status else None)
+    if rs_enum or channel or has_pending:
+        filtered_entries = storage.list_entries_filtered(
+            status=rs_enum, channel=channel,
+            has_pending=(True if has_pending else None),
+        )
+        by_svc: dict[str, set] = {}
+        for e in filtered_entries:
+            by_svc.setdefault(e.spec_name, set()).add(e.version)
+        filtered_services = set(by_svc.keys())
+
+        summary = {
+            name: {
+                "versions": [v for v in data["versions"]
+                             if not by_svc.get(name) or v[0] in by_svc.get(name, set())],
+                "entries": [e for e in data["entries"]
+                            if not by_svc.get(e.spec_name) or e.version in by_svc.get(e.spec_name, set())],
+            }
+            for name, data in summary.items()
+            if name in filtered_services or not filtered_services
+        }
+        summary = {
+            n: d for n, d in summary.items()
+            if d["versions"] or d["entries"]
+        }
 
     console.print_workspace(summary)
 
@@ -562,6 +642,61 @@ def _print_pending_summary(changes: list[Change]) -> None:
     click.echo(
         f"  Progress: {confirmed}/{len(changes)} confirmed, "
         f"{len(pending)} pending"
+    )
+
+
+# ============================================================
+# approval
+# ============================================================
+
+@main.command()
+@click.argument("entry_ref", required=True)
+@click.pass_context
+def approval(ctx: click.Context, entry_ref: str) -> None:
+    """Approval view: per-module review status before publishing.
+
+    Shows each module's unconfirmed changes and breaking changes
+    missing migration guides.
+    """
+    storage: Storage = ctx.obj["storage"]
+    console: ConsoleFormatter = ctx.obj["console"]
+
+    entry = _resolve_entry(storage, entry_ref, "approval")
+    summary = storage.approval_summary(entry.spec_name, entry.version)
+    console.print_approval(entry, summary)
+
+
+# ============================================================
+# export
+# ============================================================
+
+@main.command("export")
+@click.argument("output", required=True, type=click.Path())
+@click.pass_context
+def export_cmd(ctx: click.Context, output: str) -> None:
+    """Export entire workspace (specs + changelog) to a zip archive."""
+    storage: Storage = ctx.obj["storage"]
+    path = storage.export_workspace(output)
+    click.secho(f"[OK] Workspace exported to: {path}", fg="green")
+
+
+# ============================================================
+# import
+# ============================================================
+
+@main.command("import")
+@click.argument("archive", required=True, type=click.Path(exists=True))
+@click.option("--overwrite", is_flag=True, default=False,
+              help="Overwrite existing files if present")
+@click.pass_context
+def import_cmd(ctx: click.Context, archive: str, overwrite: bool) -> None:
+    """Import workspace from a zip archive created by 'export'."""
+    storage: Storage = ctx.obj["storage"]
+    count = storage.import_workspace(archive, overwrite=overwrite)
+    click.secho(
+        f"[OK] Imported {count} files from {archive}"
+        + (" (no overwrites)" if not overwrite else ""),
+        fg="green",
     )
 
 

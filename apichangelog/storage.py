@@ -5,6 +5,7 @@ Handles loading/saving API specs, changelog entries, and notes.
 
 import json
 import os
+import zipfile
 from pathlib import Path
 from typing import Any, Optional
 from datetime import date, datetime
@@ -405,6 +406,7 @@ class Storage:
             status=status,
             released_by=data.get("released_by", ""),
             release_channel=data.get("release_channel", ""),
+            release_template=data.get("release_template", ""),
             markdown_path=data.get("markdown_path", ""),
             diff_from_version=data.get("diff_from_version", ""),
         )
@@ -442,6 +444,7 @@ class Storage:
             "released": entry.released,
             "released_by": entry.released_by,
             "release_channel": entry.release_channel,
+            "release_template": entry.release_template,
             "markdown_path": entry.markdown_path,
             "diff_from_version": entry.diff_from_version,
         }
@@ -475,3 +478,143 @@ class Storage:
             data["entries"].sort(key=lambda x: x.version, reverse=True)
 
         return by_service
+
+    # ---------- Approval summary ----------
+
+    def approval_summary(self, spec_name: str, version: str) -> dict[str, dict]:
+        """Return per-module approval status for a release.
+
+        For each module: total changes, unconfirmed count, breaking
+        changes missing migration guide, and the list of problem items.
+        """
+        entry = self.get_entry(spec_name, version)
+        if entry is None:
+            return {}
+
+        by_module: dict[str, dict] = {}
+        for c in entry.changes:
+            mod = c.module or "default"
+            by_module.setdefault(mod, {
+                "total": 0,
+                "unconfirmed": [],
+                "breaking_no_migration": [],
+            })
+            by_module[mod]["total"] += 1
+            if not c.confirmed:
+                by_module[mod]["unconfirmed"].append(c)
+            if c.breaking and not c.migration_guide:
+                by_module[mod]["breaking_no_migration"].append(c)
+        return by_module
+
+    # ---------- Health check ----------
+
+    def health_check(self) -> dict:
+        """Scan workspace for potential issues.
+
+        Returns:
+          stale_services: services that have no diff/changelog saved
+          missing_examples_ranking: list of (service, module, count) sorted desc
+          stale_drafts: list of entries stuck in DRAFT without release_date
+          pending_ranking: services sorted by pending review count
+        """
+        summary = self.workspace_summary()
+        specs = self.list_stored_specs()
+        entries = self.load_changelog()
+
+        stale_services: list[str] = []
+        for svc, data in summary.items():
+            if not data["entries"]:
+                stale_services.append(svc)
+
+        missing_examples: list[tuple[str, str, int]] = []
+        for name, version in specs:
+            spec = self.load_stored_spec(name, version)
+            if not spec:
+                continue
+            by_mod = spec.endpoints_by_module()
+            for mod, eps in by_mod.items():
+                cnt = sum(1 for e in eps if not e.has_examples())
+                if cnt > 0:
+                    missing_examples.append((name, mod, cnt))
+        missing_examples.sort(key=lambda x: x[2], reverse=True)
+
+        stale_drafts = [
+            e for e in entries
+            if e.status == ReleaseStatus.DRAFT and e.changes
+        ]
+        stale_drafts.sort(key=lambda e: (e.spec_name, e.version))
+
+        pending_ranking: list[tuple[str, int]] = []
+        by_svc_pending: dict[str, int] = {}
+        for e in entries:
+            by_svc_pending[e.spec_name] = (
+                by_svc_pending.get(e.spec_name, 0) + e.pending_count
+            )
+        for svc in sorted(by_svc_pending.keys()):
+            pending_ranking.append((svc, by_svc_pending[svc]))
+        pending_ranking.sort(key=lambda x: x[1], reverse=True)
+
+        return {
+            "stale_services": stale_services,
+            "missing_examples_ranking": missing_examples,
+            "stale_drafts": stale_drafts,
+            "pending_ranking": pending_ranking,
+        }
+
+    # ---------- Filtered entry listing ----------
+
+    def list_entries_filtered(
+        self,
+        spec_name: Optional[str] = None,
+        status: Optional[ReleaseStatus] = None,
+        channel: Optional[str] = None,
+        has_pending: Optional[bool] = None,
+    ) -> list[ChangelogEntry]:
+        """List changelog entries with optional filters (AND logic)."""
+        entries = self.load_changelog()
+        if spec_name:
+            entries = [e for e in entries if e.spec_name == spec_name]
+        if status:
+            entries = [e for e in entries if e.status == status]
+        if channel:
+            entries = [e for e in entries if e.release_channel == channel]
+        if has_pending is not None:
+            entries = [
+                e for e in entries
+                if (e.pending_count > 0) == has_pending
+            ]
+        return sorted(entries, key=lambda e: (e.spec_name, e.version), reverse=True)
+
+    # ---------- Workspace export / import ----------
+
+    def export_workspace(self, output_path: str) -> Path:
+        """Export entire workspace (all specs + changelog) to a single zip."""
+        out = Path(output_path)
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in self.specs_dir.glob("*.json"):
+                zf.write(f, arcname=f"{DEFAULT_SPECS_DIR}/{f.name}")
+            if self.changelog_file.exists():
+                zf.write(self.changelog_file, arcname=DEFAULT_CHANGELOG_FILE)
+        return out
+
+    def import_workspace(self, input_path: str, overwrite: bool = False) -> int:
+        """Import workspace from a zip archive.
+
+        Returns number of files imported.
+        """
+        src = Path(input_path)
+        if not src.exists():
+            raise FileNotFoundError(f"Import archive not found: {input_path}")
+
+        imported = 0
+        with zipfile.ZipFile(src, "r") as zf:
+            for name in zf.namelist():
+                if name == f"{DEFAULT_SPECS_DIR}/":
+                    continue
+                target = self.changelog_dir / name
+                if target.exists() and not overwrite:
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                zf.extract(name, self.changelog_dir)
+                imported += 1
+        return imported

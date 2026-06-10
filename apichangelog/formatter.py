@@ -184,6 +184,8 @@ class ConsoleFormatter:
             meta_parts.append(f"[dim]Released by:[/dim] {entry.released_by}")
         if entry.release_channel:
             meta_parts.append(f"[dim]Channel:[/dim] [magenta]{entry.release_channel}[/magenta]")
+        if entry.release_template:
+            meta_parts.append(f"[dim]Template:[/dim] [blue]{entry.release_template}[/blue]")
         if entry.markdown_path:
             meta_parts.append(f"[dim]Markdown:[/dim] [blue]{entry.markdown_path}[/blue]")
         if entry.diff_from_version:
@@ -243,6 +245,7 @@ class ConsoleFormatter:
         table.add_column("Release Date", style="yellow")
         table.add_column("By", style="blue")
         table.add_column("Channel", style="magenta")
+        table.add_column("Template", style="blue")
         table.add_column("Changes", justify="right")
         table.add_column("Pending", justify="right", style="red")
         table.add_column("Markdown", style="cyan")
@@ -261,6 +264,7 @@ class ConsoleFormatter:
                 rel_date = entry.release_date.isoformat() if entry.release_date else "-"
                 by = entry.released_by or "-"
                 channel = entry.release_channel or "-"
+                template = entry.release_template or "-"
                 n_changes = len(entry.changes)
                 n_pending = entry.pending_count
                 md_path = entry.markdown_path or "-"
@@ -269,10 +273,11 @@ class ConsoleFormatter:
                 rel_date = "-"
                 by = "-"
                 channel = "-"
+                template = "-"
                 n_changes = 0
                 n_pending = 0
                 md_path = "-"
-            table.add_row(name, version, status, rel_date, by, channel,
+            table.add_row(name, version, status, rel_date, by, channel, template,
                           str(n_changes), str(n_pending), md_path)
 
         self.console.print(table)
@@ -425,6 +430,124 @@ class ConsoleFormatter:
                     for ep in no_examples:
                         self.console.print(f"  - [red]{ep.key}[/red]")
 
+    # ---------- Approval output ----------
+
+    def print_approval(self, entry: ChangelogEntry,
+                       approval_by_module: dict[str, dict]) -> None:
+        """Print per-module approval status for a release candidate."""
+        total_changes = len(entry.changes)
+        total_pending = entry.pending_count
+        breaking_no_mig = sum(
+            len(m["breaking_no_migration"]) for m in approval_by_module.values()
+        )
+        total_unconfirmed = sum(
+            len(m["unconfirmed"]) for m in approval_by_module.values()
+        )
+        ready = (total_pending == 0)
+
+        status_label = ("[bold green]READY TO PUBLISH[/bold green]"
+                        if ready else "[bold red]NOT READY[/bold red]")
+        header = Panel.fit(
+            Text.from_markup(
+                f"[bold cyan]{entry.spec_name} {entry.version}[/bold cyan]  {status_label}\n"
+                f"[dim]Total changes:[/dim] {total_changes}  "
+                f"[dim]Confirmed:[/dim] [green]{total_changes - total_unconfirmed}[/green]  "
+                f"[dim]Unconfirmed:[/dim] [yellow]{total_unconfirmed}[/yellow]\n"
+                f"[dim]Breaking without migration:[/dim] [red]{breaking_no_mig}[/red]  "
+                f"[dim]Pending total:[/dim] [red]{total_pending}[/red]"
+            ),
+            title="Approval Checklist",
+            border_style=("green" if ready else "red"),
+        )
+        self.console.print(header)
+
+        if not approval_by_module:
+            self.console.print("[dim]No changelog data. Run diff --save first.[/dim]")
+            return
+
+        self.console.print()
+        for mod in sorted(approval_by_module.keys()):
+            data = approval_by_module[mod]
+            mod_ready = (
+                len(data["unconfirmed"]) == 0
+                and len(data["breaking_no_migration"]) == 0
+            )
+            badge = ("[green][OK][/green]" if mod_ready else "[red][!][/red]")
+            tree = Tree(
+                f"{badge} [bold blue]{mod}[/bold blue]  "
+                f"[dim]{data['total']} changes[/dim]  "
+                f"[yellow]{len(data['unconfirmed'])} unconfirmed[/yellow]  "
+                f"[red]{len(data['breaking_no_migration'])} breaking-no-mig[/red]"
+            )
+            for c in data["unconfirmed"]:
+                tree.add(f"[yellow][-] Needs confirmation: {c.description}[/yellow]")
+            for c in data["breaking_no_migration"]:
+                tree.add(
+                    f"[red][!] Missing migration: {c.description}[/red]"
+                )
+            self.console.print(tree)
+            self.console.print()
+
+    # ---------- Health check output ----------
+
+    def print_health_check(self, health: dict) -> None:
+        """Print workspace health check report."""
+        stale_services = health["stale_services"]
+        missing = health["missing_examples_ranking"]
+        stale_drafts = health["stale_drafts"]
+        pending_rank = health["pending_ranking"]
+
+        issues = len(stale_services) + len(missing) + len(stale_drafts)
+        header = Panel.fit(
+            Text.from_markup(
+                f"[bold cyan]{issues}[/bold cyan] issues detected\n"
+                f"[dim]Stale services:[/dim] {len(stale_services)}  "
+                f"[dim]Modules missing examples:[/dim] {len(missing)}  "
+                f"[dim]Stale drafts:[/dim] {len(stale_drafts)}"
+            ),
+            title="Workspace Health Check",
+            border_style=("red" if issues else "green"),
+        )
+        self.console.print(header)
+
+        if stale_services:
+            self.console.print()
+            self.console.print("[bold red]Stale services (no diff/changelog saved yet)[/bold red]")
+            for name in stale_services:
+                self.console.print(f"  - [yellow]{name}[/yellow]")
+
+        if missing:
+            self.console.print()
+            self.console.print("[bold yellow]Modules missing examples (worst first)[/bold yellow]")
+            table = Table(show_header=True, show_lines=False)
+            table.add_column("Service", style="cyan")
+            table.add_column("Module", style="blue")
+            table.add_column("Missing Examples", style="red", justify="right")
+            for name, mod, cnt in missing:
+                table.add_row(name, mod, str(cnt))
+            self.console.print(table)
+
+        if stale_drafts:
+            self.console.print()
+            self.console.print("[bold yellow]Stale drafts (need publishing)[/bold yellow]")
+            for e in stale_drafts:
+                self.console.print(
+                    f"  - [yellow]{e.spec_name}:{e.version}[/yellow]  "
+                    f"[dim]{len(e.changes)} changes, {e.pending_count} pending[/dim]"
+                )
+
+        if pending_rank:
+            self.console.print()
+            self.console.print("[bold blue]Services by pending review count[/bold blue]")
+            for name, cnt in pending_rank:
+                if cnt == 0:
+                    continue
+                self.console.print(f"  - [cyan]{name}[/cyan]: [red]{cnt}[/red] pending")
+
+        if issues == 0:
+            self.console.print()
+            self.console.print("[green]All healthy - nothing to address.[/green]")
+
 
 class MarkdownFormatter:
     """Generates Markdown format changelogs."""
@@ -493,7 +616,8 @@ class MarkdownFormatter:
 
         return "\n".join(lines)
 
-    def _render_change_group(self, changes: list[Change]) -> list[str]:
+    def _render_change_group(self, changes: list[Change],
+                              template: str = "default") -> list[str]:
         lines: list[str] = []
         for ct in (ChangeType.ADDED, ChangeType.MODIFIED,
                    ChangeType.REMOVED, ChangeType.DEPRECATED):
@@ -504,6 +628,8 @@ class MarkdownFormatter:
             lines.append(f"### {label}")
             lines.append("")
             for c in group:
+                if template == "public" and c.impact == ImpactLevel.LOW:
+                    continue
                 impact = f" `[{c.impact.value.upper()}]`" if c.impact != ImpactLevel.NONE else ""
                 lines.append(f"- {c.description}{impact}")
                 for fc in c.field_changes:
@@ -518,8 +644,9 @@ class MarkdownFormatter:
                         detail += f": `{fc.old_value}`"
                     lines.append(detail)
                 for note in c.notes:
-                    lines.append(f"  - _{note}_")
-                if c.migration_guide:
+                    if template == "internal":
+                        lines.append(f"  - _{note}_")
+                if c.migration_guide and template != "public":
                     lines.append(f"  - **Migration:** {c.migration_guide}")
             lines.append("")
         return lines
@@ -527,12 +654,23 @@ class MarkdownFormatter:
     # ---------- Release Markdown ----------
 
     def render_release(self, entry: ChangelogEntry, release_info: ReleaseInfo,
-                        filtered_changes: Optional[list[Change]] = None) -> str:
+                        filtered_changes: Optional[list[Change]] = None,
+                        template: str = "default") -> str:
         changes = filtered_changes if filtered_changes is not None else entry.changes
         lines: list[str] = []
         date_str = release_info.release_date.isoformat()
         lines.append(f"# {release_info.version}")
         lines.append("")
+
+        if template == "beta":
+            lines.append("> **BETA RELEASE** - This API is under active development and may change without notice.")
+            lines.append("")
+        elif template == "internal":
+            lines.append(f"> **Internal Release** - Channel: {entry.release_channel or 'internal'}")
+            if entry.released_by:
+                lines.append(f"> Released by: {entry.released_by}")
+            lines.append("")
+
         lines.append(f"_Released on {date_str}_")
         lines.append("")
 
@@ -561,9 +699,10 @@ class MarkdownFormatter:
                 if c.migration_guide:
                     lines.append(f"**Migration guide:** {c.migration_guide}")
                     lines.append("")
-                for note in c.notes:
-                    lines.append(f"> {note}")
-                    lines.append("")
+                if template == "internal":
+                    for note in c.notes:
+                        lines.append(f"> {note}")
+                        lines.append("")
 
         by_module: dict[str, list[Change]] = {}
         for c in changes:
@@ -572,16 +711,28 @@ class MarkdownFormatter:
         for mod in sorted(by_module.keys()):
             lines.append(f"## {mod}")
             lines.append("")
-            lines.extend(self._render_change_group(by_module[mod]))
+            lines.extend(self._render_change_group(by_module[mod], template))
 
-        if entry.notes:
+        if template == "internal" and entry.notes:
             lines.append("---")
             lines.append("")
-            lines.append("## Notes")
+            lines.append("## Internal Notes")
             lines.append("")
             for n in entry.notes:
                 lines.append(f"- {n}")
             lines.append("")
+
+        if template == "internal":
+            pending = [c for c in changes if c.is_pending()]
+            if pending:
+                lines.append("---")
+                lines.append("")
+                lines.append("## Pending Review")
+                lines.append("")
+                for c in pending:
+                    tag = " **[BREAKING]**" if c.breaking else ""
+                    lines.append(f"- [ ] {c.description}{tag}")
+                lines.append("")
 
         return "\n".join(lines)
 

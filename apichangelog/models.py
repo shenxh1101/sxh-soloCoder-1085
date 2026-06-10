@@ -211,6 +211,7 @@ class ChangelogEntry:
     status: ReleaseStatus = ReleaseStatus.DRAFT
     released_by: str = ""
     release_channel: str = ""
+    release_template: str = ""
     markdown_path: str = ""
     diff_from_version: str = ""
 

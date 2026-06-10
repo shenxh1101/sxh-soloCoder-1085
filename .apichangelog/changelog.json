@@ -343,13 +343,14 @@
     "released": true,
     "released_by": "alice@example.com",
     "release_channel": "public",
+    "release_template": "",
     "markdown_path": "D:\\code\\TraeProjects\\1085\\examples\\RELEASE_UserService_2.0.0.md",
     "diff_from_version": "1.0.0"
   },
   {
     "spec_name": "OrderService",
     "version": "2.0.0",
-    "release_date": null,
+    "release_date": "2026-06-09",
     "changes": [
       {
         "change_type": "modified",
@@ -764,11 +765,12 @@
       }
     ],
     "notes": [],
-    "status": "draft",
-    "released": false,
-    "released_by": "",
-    "release_channel": "",
-    "markdown_path": "",
+    "status": "published",
+    "released": true,
+    "released_by": "bob@example.com",
+    "release_channel": "internal",
+    "release_template": "internal",
+    "markdown_path": "D:\\code\\TraeProjects\\1085\\examples\\RELEASE_OrderService_2.0.0_internal.md",
     "diff_from_version": "1.0.0"
   }
 ]
